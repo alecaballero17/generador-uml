@@ -1,0 +1,141 @@
+{
+    "id": "veterinaria-example-001",
+    "name": "Sistema Veterinaria",
+    "description": "Ejemplo de diagrama para un sistema de gestión de veterinaria. Incluye clientes, mascotas, veterinarios, citas y tratamientos.",
+    "classes": [
+        {
+            "id": "cls-cliente",
+            "name": "Cliente",
+            "visibility": "+",
+            "isAbstract": false,
+            "isInterface": false,
+            "attributes": [
+                {"id": "attr-c1", "name": "nombre", "type": "String", "visibility": "-"},
+                {"id": "attr-c2", "name": "apellido", "type": "String", "visibility": "-"},
+                {"id": "attr-c3", "name": "telefono", "type": "String", "visibility": "-"},
+                {"id": "attr-c4", "name": "email", "type": "String", "visibility": "-"},
+                {"id": "attr-c5", "name": "direccion", "type": "String", "visibility": "-"}
+            ],
+            "operations": [
+                {"id": "op-c1", "name": "registrar", "parameters": [], "returnType": "void", "visibility": "+"},
+                {"id": "op-c2", "name": "actualizar", "parameters": [], "returnType": "void", "visibility": "+"},
+                {"id": "op-c3", "name": "obtenerMascotas", "parameters": [], "returnType": "List", "visibility": "+"}
+            ],
+            "position": {"x": 50, "y": 50},
+            "size": {"width": 220, "height": 180}
+        },
+        {
+            "id": "cls-mascota",
+            "name": "Mascota",
+            "visibility": "+",
+            "isAbstract": false,
+            "isInterface": false,
+            "attributes": [
+                {"id": "attr-m1", "name": "nombre", "type": "String", "visibility": "-"},
+                {"id": "attr-m2", "name": "especie", "type": "String", "visibility": "-"},
+                {"id": "attr-m3", "name": "raza", "type": "String", "visibility": "-"},
+                {"id": "attr-m4", "name": "fechaNacimiento", "type": "LocalDate", "visibility": "-"},
+                {"id": "attr-m5", "name": "peso", "type": "Double", "visibility": "-"},
+                {"id": "attr-m6", "name": "sexo", "type": "String", "visibility": "-"}
+            ],
+            "operations": [
+                {"id": "op-m1", "name": "calcularEdad", "parameters": [], "returnType": "Integer", "visibility": "+"},
+                {"id": "op-m2", "name": "obtenerHistorial", "parameters": [], "returnType": "List", "visibility": "+"}
+            ],
+            "position": {"x": 350, "y": 50},
+            "size": {"width": 220, "height": 200}
+        },
+        {
+            "id": "cls-veterinario",
+            "name": "Veterinario",
+            "visibility": "+",
+            "isAbstract": false,
+            "isInterface": false,
+            "attributes": [
+                {"id": "attr-v1", "name": "nombre", "type": "String", "visibility": "-"},
+                {"id": "attr-v2", "name": "apellido", "type": "String", "visibility": "-"},
+                {"id": "attr-v3", "name": "especialidad", "type": "String", "visibility": "-"},
+                {"id": "attr-v4", "name": "matricula", "type": "String", "visibility": "-"},
+                {"id": "attr-v5", "name": "telefono", "type": "String", "visibility": "-"}
+            ],
+            "operations": [
+                {"id": "op-v1", "name": "atenderCita", "parameters": [{"id": "p1", "name": "cita", "type": "Cita"}], "returnType": "void", "visibility": "+"},
+                {"id": "op-v2", "name": "prescribirTratamiento", "parameters": [], "returnType": "Tratamiento", "visibility": "+"}
+            ],
+            "position": {"x": 50, "y": 320},
+            "size": {"width": 240, "height": 180}
+        },
+        {
+            "id": "cls-cita",
+            "name": "Cita",
+            "visibility": "+",
+            "isAbstract": false,
+            "isInterface": false,
+            "attributes": [
+                {"id": "attr-ci1", "name": "fecha", "type": "LocalDateTime", "visibility": "-"},
+                {"id": "attr-ci2", "name": "motivo", "type": "String", "visibility": "-"},
+                {"id": "attr-ci3", "name": "diagnostico", "type": "String", "visibility": "-"},
+                {"id": "attr-ci4", "name": "estado", "type": "String", "visibility": "-"},
+                {"id": "attr-ci5", "name": "observaciones", "type": "String", "visibility": "-"}
+            ],
+            "operations": [
+                {"id": "op-ci1", "name": "confirmar", "parameters": [], "returnType": "void", "visibility": "+"},
+                {"id": "op-ci2", "name": "cancelar", "parameters": [], "returnType": "void", "visibility": "+"},
+                {"id": "op-ci3", "name": "completar", "parameters": [], "returnType": "void", "visibility": "+"}
+            ],
+            "position": {"x": 350, "y": 320},
+            "size": {"width": 220, "height": 200}
+        },
+        {
+            "id": "cls-tratamiento",
+            "name": "Tratamiento",
+            "visibility": "+",
+            "isAbstract": false,
+            "isInterface": false,
+            "attributes": [
+                {"id": "attr-t1", "name": "descripcion", "type": "String", "visibility": "-"},
+                {"id": "attr-t2", "name": "medicamento", "type": "String", "visibility": "-"},
+                {"id": "attr-t3", "name": "dosis", "type": "String", "visibility": "-"},
+                {"id": "attr-t4", "name": "duracionDias", "type": "Integer", "visibility": "-"},
+                {"id": "attr-t5", "name": "costo", "type": "BigDecimal", "visibility": "-"}
+            ],
+            "operations": [
+                {"id": "op-t1", "name": "calcularCostoTotal", "parameters": [], "returnType": "BigDecimal", "visibility": "+"}
+            ],
+            "position": {"x": 650, "y": 320},
+            "size": {"width": 220, "height": 170}
+        }
+    ],
+    "relationships": [
+        {
+            "id": "rel-1",
+            "type": "composition",
+            "source": {"classId": "cls-cliente", "role": "dueño", "multiplicity": "1", "navigable": true},
+            "target": {"classId": "cls-mascota", "role": "mascotas", "multiplicity": "1..*", "navigable": true},
+            "name": "tiene"
+        },
+        {
+            "id": "rel-2",
+            "type": "association",
+            "source": {"classId": "cls-mascota", "role": null, "multiplicity": "1", "navigable": true},
+            "target": {"classId": "cls-cita", "role": "citas", "multiplicity": "0..*", "navigable": true},
+            "name": "asiste"
+        },
+        {
+            "id": "rel-3",
+            "type": "association",
+            "source": {"classId": "cls-veterinario", "role": null, "multiplicity": "1", "navigable": true},
+            "target": {"classId": "cls-cita", "role": "citas", "multiplicity": "0..*", "navigable": true},
+            "name": "atiende"
+        },
+        {
+            "id": "rel-4",
+            "type": "association",
+            "source": {"classId": "cls-cita", "role": null, "multiplicity": "1", "navigable": true},
+            "target": {"classId": "cls-tratamiento", "role": "tratamientos", "multiplicity": "0..*", "navigable": true},
+            "name": "incluye"
+        }
+    ],
+    "version": "1.0.0",
+    "umlVersion": "2.5.1"
+}

@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeneradorUML — Editor de Diagramas de Clases</title>
+    <meta name="description" content="Herramienta CASE para crear, editar e interpretar diagramas de clases UML 2.5+ y generar aplicaciones completas.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/index.css">
+</head>
+<body>
+    <!-- ─── Top Bar ──────────────────────────────────────────────────── -->
+    <header id="topbar">
+        <div class="topbar-left">
+            <div class="logo" id="logo">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <rect x="2" y="2" width="24" height="24" rx="6" stroke="url(#logoGrad)" stroke-width="2.5"/>
+                    <line x1="8" y1="9" x2="20" y2="9" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="8" y1="14" x2="20" y2="14" stroke="url(#logoGrad)" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+                    <line x1="8" y1="19" x2="16" y2="19" stroke="url(#logoGrad)" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+                    <defs>
+                        <linearGradient id="logoGrad" x1="0" y1="0" x2="28" y2="28">
+                            <stop stop-color="#818cf8"/>
+                            <stop offset="1" stop-color="#c084fc"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <span>GeneradorUML</span>
+            </div>
+            <div class="topbar-divider"></div>
+            <input type="text" id="projectName" class="project-name-input" value="Nuevo Diagrama" spellcheck="false">
+        </div>
+        <div class="topbar-center">
+            <div class="topbar-tabs">
+                <button class="tab-btn active" data-tab="editor" id="tabEditor">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/><line x1="1" y1="5.5" x2="15" y2="5.5" stroke="currentColor" stroke-width="1"/><line x1="1" y1="10" x2="15" y2="10" stroke="currentColor" stroke-width="1"/></svg>
+                    Editor
+                </button>
+                <button class="tab-btn" data-tab="generate" id="tabGenerate">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 2L12 8L4 14V2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+                    Generar
+                </button>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <span id="collabStatus" class="collab-badge" title="Estado de sincronización en tiempo real">
+                <span class="status-dot online"></span> Conectado
+            </span>
+            <div class="topbar-divider"></div>
+            <button class="icon-btn" id="btnVoice" title="Entrada por voz">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="6" y="1" width="6" height="10" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M3 8C3 11.3 5.7 14 9 14C12.3 14 15 11.3 15 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="9" y1="14" x2="9" y2="17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+            <button class="icon-btn" id="btnPhoto" title="Importar fotografía">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="1" y="3" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M17 13L13 9L6 15" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="topbar-divider"></div>
+            <button class="icon-btn" id="btnImport" title="Importar">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2V12M9 12L5 8M9 12L13 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13V15C2 15.6 2.4 16 3 16H15C15.6 16 16 15.6 16 15V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+            <button class="icon-btn" id="btnExport" title="Exportar">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 12V2M9 2L5 6M9 2L13 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13V15C2 15.6 2.4 16 3 16H15C15.6 16 16 15.6 16 15V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+            <button class="icon-btn" id="btnSave" title="Guardar proyecto (Ctrl+S)">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M14 16H4C3.4 16 3 15.6 3 15V3C3 2.4 3.4 2 4 2H12L15 5V15C15 15.6 14.6 16 14 16Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><rect x="6" y="10" width="6" height="4" rx="0.5" stroke="currentColor" stroke-width="1.2"/><line x1="6" y1="2" x2="6" y2="6" stroke="currentColor" stroke-width="1.2"/><line x1="10" y1="2" x2="10" y2="6" stroke="currentColor" stroke-width="1.2"/></svg>
+            </button>
+            <button class="btn-primary" id="btnGenerateCode">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M5 3L11 8L5 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Generar Código
+            </button>
+        </div>
+    </header>
+
+    <!-- ─── Main Layout ─────────────────────────────────────────────── -->
+    <main id="mainLayout">
+        <!-- ─── Left Sidebar: Toolbox ─────────────────────────────── -->
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-section">
+                <h3 class="sidebar-title">Elementos</h3>
+                <div class="tool-grid">
+                    <button class="tool-btn" id="toolClass" data-tool="class" title="Clase (C)">
+                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                            <rect x="2" y="2" width="28" height="28" rx="3" stroke="currentColor" stroke-width="1.5"/>
+                            <line x1="2" y1="10" x2="30" y2="10" stroke="currentColor" stroke-width="1"/>
+                            <line x1="2" y1="20" x2="30" y2="20" stroke="currentColor" stroke-width="1"/>
+                            <text x="16" y="8" text-anchor="middle" fill="currentColor" font-size="6" font-weight="600">Clase</text>
+                        </svg>
+                        <span>Clase</span>
+                    </button>
+                    <button class="tool-btn" id="toolInterface" data-tool="interface" title="Interfaz (I)">
+                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                            <rect x="2" y="2" width="28" height="28" rx="3" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 2"/>
+                            <line x1="2" y1="10" x2="30" y2="10" stroke="currentColor" stroke-width="1"/>
+                            <line x1="2" y1="20" x2="30" y2="20" stroke="currentColor" stroke-width="1"/>
+                        </svg>
+                        <span>Interfaz</span>
+                    </button>
+                    <button class="tool-btn" id="toolAbstract" data-tool="abstract" title="Clase Abstracta">
+                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                            <rect x="2" y="2" width="28" height="28" rx="3" stroke="currentColor" stroke-width="1.5"/>
+                            <line x1="2" y1="10" x2="30" y2="10" stroke="currentColor" stroke-width="1"/>
+                            <text x="16" y="8" text-anchor="middle" fill="currentColor" font-size="5" font-style="italic">Abstract</text>
+                        </svg>
+                        <span>Abstracta</span>
+                    </button>
+                </div>
+            </div>
+            <div class="sidebar-section">
+                <h3 class="sidebar-title">Relaciones</h3>
+                <div class="tool-grid">
+                    <button class="tool-btn" id="toolAssociation" data-tool="association" title="Asociación">
+                        <svg width="32" height="14" viewBox="0 0 32 14" fill="none">
+                            <line x1="2" y1="7" x2="26" y2="7" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M26 7L22 4M26 7L22 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                        <span>Asociación</span>
+                    </button>
+                    <button class="tool-btn" id="toolAggregation" data-tool="aggregation" title="Agregación">
+                        <svg width="32" height="14" viewBox="0 0 32 14" fill="none">
+                            <path d="M2 7L7 3L12 7L7 11Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                            <line x1="12" y1="7" x2="30" y2="7" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                        <span>Agregación</span>
+                    </button>
+                    <button class="tool-btn" id="toolComposition" data-tool="composition" title="Composición">
+                        <svg width="32" height="14" viewBox="0 0 32 14" fill="none">
+                            <path d="M2 7L7 3L12 7L7 11Z" stroke="currentColor" stroke-width="1.5" fill="currentColor"/>
+                            <line x1="12" y1="7" x2="30" y2="7" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                        <span>Composición</span>
+                    </button>
+                    <button class="tool-btn" id="toolGeneralization" data-tool="generalization" title="Herencia">
+                        <svg width="32" height="14" viewBox="0 0 32 14" fill="none">
+                            <line x1="2" y1="7" x2="22" y2="7" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M22 7L27 3L27 11Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                        </svg>
+                        <span>Herencia</span>
+                    </button>
+                    <button class="tool-btn" id="toolRealization" data-tool="realization" title="Realización">
+                        <svg width="32" height="14" viewBox="0 0 32 14" fill="none">
+                            <line x1="2" y1="7" x2="22" y2="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 2"/>
+                            <path d="M22 7L27 3L27 11Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                        </svg>
+                        <span>Realización</span>
+                    </button>
+                    <button class="tool-btn" id="toolDependency" data-tool="dependency" title="Dependencia">
+                        <svg width="32" height="14" viewBox="0 0 32 14" fill="none">
+                            <line x1="2" y1="7" x2="26" y2="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 2"/>
+                            <path d="M26 7L22 4M26 7L22 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                        <span>Dependencia</span>
+                    </button>
+                </div>
+            </div>
+            <div class="sidebar-section">
+                <h3 class="sidebar-title">Acciones</h3>
+                <div class="action-buttons">
+                    <button class="action-btn" id="btnUndo" title="Deshacer (Ctrl+Z)">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8H12C13.1 8 14 8.9 14 10C14 11.1 13.1 12 12 12H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6 5L3 8L6 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Deshacer
+                    </button>
+                    <button class="action-btn" id="btnRedo" title="Rehacer (Ctrl+Y)">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 8H4C2.9 8 2 8.9 2 10C2 11.1 2.9 12 4 12H8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10 5L13 8L10 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Rehacer
+                    </button>
+                    <button class="action-btn danger" id="btnDelete" title="Eliminar selección (Del)">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4H13M5 4V3C5 2.4 5.4 2 6 2H10C10.6 2 11 2.4 11 3V4M6 7V12M10 7V12M4 4L5 14H11L12 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Eliminar
+                    </button>
+                    <button class="action-btn" id="btnValidate" title="Validar diagrama">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8L6 11L13 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Validar
+                    </button>
+                    <button class="action-btn" id="btnZoomFit" title="Ajustar al contenido">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/></svg>
+                        Ajustar
+                    </button>
+                </div>
+            </div>
+            <div class="sidebar-section">
+                <h3 class="sidebar-title">Zoom</h3>
+                <div class="zoom-control">
+                    <button class="zoom-btn" id="btnZoomOut">−</button>
+                    <span class="zoom-level" id="zoomLevel">100%</span>
+                    <button class="zoom-btn" id="btnZoomIn">+</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ─── Canvas ────────────────────────────────────────────── -->
+        <div id="canvasContainer" class="canvas-container">
+            <svg id="canvas" class="canvas" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="var(--grid-color)" stroke-width="0.5" opacity="0.3"/>
+                    </pattern>
+                    <pattern id="gridLarge" width="100" height="100" patternUnits="userSpaceOnUse">
+                        <rect width="100" height="100" fill="url(#grid)"/>
+                        <path d="M 100 0 L 0 0 0 100" fill="none" stroke="var(--grid-color)" stroke-width="1" opacity="0.15"/>
+                    </pattern>
+                    <!-- Arrow markers for relationships -->
+                    <marker id="arrowOpen" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                        <path d="M0,0 L10,3.5 L0,7" fill="none" stroke="var(--rel-color)" stroke-width="1.5"/>
+                    </marker>
+                    <marker id="arrowClosed" markerWidth="12" markerHeight="8" refX="12" refY="4" orient="auto">
+                        <path d="M0,0 L12,4 L0,8 Z" fill="none" stroke="var(--rel-color)" stroke-width="1.5"/>
+                    </marker>
+                    <marker id="diamondEmpty" markerWidth="14" markerHeight="8" refX="0" refY="4" orient="auto">
+                        <path d="M0,4 L7,0 L14,4 L7,8 Z" fill="var(--canvas-bg)" stroke="var(--rel-color)" stroke-width="1.5"/>
+                    </marker>
+                    <marker id="diamondFull" markerWidth="14" markerHeight="8" refX="0" refY="4" orient="auto">
+                        <path d="M0,4 L7,0 L14,4 L7,8 Z" fill="var(--rel-color)" stroke="var(--rel-color)" stroke-width="1.5"/>
+                    </marker>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#gridLarge)"/>
+                <g id="diagramLayer" transform="translate(0,0) scale(1)">
+                    <g id="relationshipsLayer"></g>
+                    <g id="classesLayer"></g>
+                </g>
+            </svg>
+
+            <!-- Canvas overlay for status messages -->
+            <div id="canvasOverlay" class="canvas-overlay hidden">
+                <div class="overlay-content">
+                    <p id="overlayMessage">Haz clic en "Clase" en la barra lateral y luego en el canvas para crear tu primera clase</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ─── Right Panel: Properties ──────────────────────────── -->
+        <aside id="propertiesPanel" class="properties-panel">
+            <div class="panel-header">
+                <h3 id="panelTitle">Propiedades</h3>
+                <button class="icon-btn small" id="btnClosePanel" title="Cerrar panel">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3L11 11M11 3L3 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+
+            <!-- No selection state -->
+            <div id="noSelection" class="panel-body">
+                <div class="empty-state">
+                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" opacity="0.3">
+                        <rect x="4" y="4" width="40" height="40" rx="8" stroke="currentColor" stroke-width="2"/>
+                        <line x1="4" y1="16" x2="44" y2="16" stroke="currentColor" stroke-width="1.5"/>
+                        <line x1="4" y1="28" x2="44" y2="28" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                    <p>Selecciona un elemento para ver sus propiedades</p>
+                </div>
+            </div>
+
+            <!-- Class properties -->
+            <div id="classProperties" class="panel-body hidden">
+                <div class="prop-group">
+                    <label class="prop-label">Nombre</label>
+                    <input type="text" id="propClassName" class="prop-input" placeholder="NombreClase">
+                </div>
+                <div class="prop-group">
+                    <label class="prop-label">Estereotipo</label>
+                    <select id="propClassType" class="prop-select">
+                        <option value="class">Clase</option>
+                        <option value="abstract">Abstracta</option>
+                        <option value="interface">Interfaz</option>
+                    </select>
+                </div>
+                <div class="prop-group">
+                    <label class="prop-label">Visibilidad</label>
+                    <select id="propClassVisibility" class="prop-select">
+                        <option value="+">+ public</option>
+                        <option value="-">- private</option>
+                        <option value="#"># protected</option>
+                        <option value="~">~ package</option>
+                    </select>
+                </div>
+
+                <!-- Attributes -->
+                <div class="prop-section">
+                    <div class="prop-section-header">
+                        <h4>Atributos</h4>
+                        <button class="add-btn" id="btnAddAttribute" title="Agregar atributo">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><line x1="7" y1="2" x2="7" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="2" y1="7" x2="12" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        </button>
+                    </div>
+                    <div id="attributesList" class="items-list"></div>
+                </div>
+
+                <!-- Operations -->
+                <div class="prop-section">
+                    <div class="prop-section-header">
+                        <h4>Operaciones</h4>
+                        <button class="add-btn" id="btnAddOperation" title="Agregar operación">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><line x1="7" y1="2" x2="7" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="2" y1="7" x2="12" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        </button>
+                    </div>
+                    <div id="operationsList" class="items-list"></div>
+                </div>
+            </div>
+
+            <!-- Relationship properties -->
+            <div id="relationshipProperties" class="panel-body hidden">
+                <div class="prop-group">
+                    <label class="prop-label">Tipo</label>
+                    <select id="propRelType" class="prop-select">
+                        <option value="association">Asociación</option>
+                        <option value="aggregation">Agregación</option>
+                        <option value="composition">Composición</option>
+                        <option value="generalization">Herencia</option>
+                        <option value="realization">Realización</option>
+                        <option value="dependency">Dependencia</option>
+                    </select>
+                </div>
+                <div class="prop-group">
+                    <label class="prop-label">Nombre</label>
+                    <input type="text" id="propRelName" class="prop-input" placeholder="nombre relación">
+                </div>
+                <fieldset class="prop-fieldset">
+                    <legend>Origen</legend>
+                    <div class="prop-group">
+                        <label class="prop-label">Rol</label>
+                        <input type="text" id="propRelSourceRole" class="prop-input" placeholder="rol">
+                    </div>
+                    <div class="prop-group">
+                        <label class="prop-label">Multiplicidad</label>
+                        <select id="propRelSourceMult" class="prop-select">
+                            <option value="1">1</option>
+                            <option value="0..1">0..1</option>
+                            <option value="0..*">0..*</option>
+                            <option value="1..*">1..*</option>
+                            <option value="*">*</option>
+                        </select>
+                    </div>
+                </fieldset>
+                <fieldset class="prop-fieldset">
+                    <legend>Destino</legend>
+                    <div class="prop-group">
+                        <label class="prop-label">Rol</label>
+                        <input type="text" id="propRelTargetRole" class="prop-input" placeholder="rol">
+                    </div>
+                    <div class="prop-group">
+                        <label class="prop-label">Multiplicidad</label>
+                        <select id="propRelTargetMult" class="prop-select">
+                            <option value="1">1</option>
+                            <option value="0..1">0..1</option>
+                            <option value="0..*" selected>0..*</option>
+                            <option value="1..*">1..*</option>
+                            <option value="*">*</option>
+                        </select>
+                    </div>
+                </fieldset>
+            </div>
+        </aside>
+    </main>
+
+    <!-- ─── Generation Panel (overlay) ───────────────────────────── -->
+    <div id="generatePanel" class="generate-panel hidden">
+        <div class="gen-panel-content">
+            <div class="gen-header">
+                <h2>Generar Aplicación</h2>
+                <button class="icon-btn" id="btnCloseGenerate">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 4L14 14M14 4L4 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+            <div class="gen-body">
+                <div class="gen-stats">
+                    <div class="stat-card">
+                        <span class="stat-value" id="statClasses">0</span>
+                        <span class="stat-label">Clases</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-value" id="statRelationships">0</span>
+                        <span class="stat-label">Relaciones</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-value" id="statAttributes">0</span>
+                        <span class="stat-label">Atributos</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-value" id="statOperations">0</span>
+                        <span class="stat-label">Operaciones</span>
+                    </div>
+                </div>
+                <div class="gen-options">
+                    <div class="prop-group">
+                        <label class="prop-label">Paquete base</label>
+                        <input type="text" id="genPackage" class="prop-input" value="com.generated.app">
+                    </div>
+                    <div class="gen-checks">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="genSpringBoot" checked disabled>
+                            <span>Spring Boot + JPA + PostgreSQL</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="genFlutter" checked>
+                            <span>Flutter (frontend móvil)</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="genPostman" checked>
+                            <span>Colección Postman</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="gen-actions">
+                    <button class="btn-primary large" id="btnStartGeneration">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M6 3L16 10L6 17V3Z" fill="currentColor"/></svg>
+                        Generar Aplicación
+                    </button>
+                    <button class="btn-secondary" id="btnDownloadZip">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2V10M8 10L4 6M8 10L12 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12V14H14V12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        Descargar ZIP
+                    </button>
+                </div>
+                <div id="genProgress" class="gen-progress hidden">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-log" id="progressLog"></div>
+                </div>
+                <div id="genResults" class="gen-results hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Validation Results Panel ─────────────────────────────── -->
+    <div id="validationPanel" class="validation-panel hidden">
+        <div class="val-header">
+            <h3>Validación UML</h3>
+            <button class="icon-btn small" id="btnCloseValidation">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3L11 11M11 3L3 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+        </div>
+        <div id="validationResults" class="val-body"></div>
+    </div>
+
+    <!-- ─── Toast Notifications ──────────────────────────────────── -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- ─── Voice Input Modal ────────────────────────────────────── -->
+    <div id="voiceModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Entrada por Voz</h3>
+                <button class="icon-btn" id="btnCloseVoice">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 4L14 14M14 4L4 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+            <div class="modal-body voice-modal">
+                <div class="voice-indicator" id="voiceIndicator">
+                    <div class="voice-circle"></div>
+                    <div class="voice-circle delay-1"></div>
+                    <div class="voice-circle delay-2"></div>
+                </div>
+                <p id="voiceStatus" class="voice-status">Presiona para comenzar a dictar</p>
+                <p id="voiceTranscript" class="voice-transcript"></p>
+                <div class="voice-actions">
+                    <button class="btn-primary" id="btnStartVoice">🎤 Comenzar</button>
+                    <button class="btn-secondary" id="btnApplyVoice" disabled>Aplicar</button>
+                </div>
+                <div class="voice-examples">
+                    <p class="examples-title">Ejemplos de comandos:</p>
+                    <ul>
+                        <li>"Crear clase Mascota"</li>
+                        <li>"Agregar atributo nombre tipo String a Mascota"</li>
+                        <li>"Crear relación de composición de Cliente a Mascota"</li>
+                        <li>"Agregar operación calcularEdad a Mascota que retorna Integer"</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Photo Import Modal ───────────────────────────────────── -->
+    <div id="photoModal" class="modal hidden">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3>Importar Fotografía</h3>
+                <button class="icon-btn" id="btnClosePhoto">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 4L14 14M14 4L4 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="photo-dropzone" id="photoDropzone">
+                    <svg width="64" height="64" viewBox="0 0 64 64" fill="none" opacity="0.3">
+                        <rect x="4" y="10" width="56" height="44" rx="4" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="22" cy="28" r="6" stroke="currentColor" stroke-width="2"/>
+                        <path d="M60 46L46 32L20 54" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    <p>Arrastra una imagen aquí o haz clic para seleccionar</p>
+                    <input type="file" id="photoInput" accept="image/*" class="hidden-input">
+                </div>
+                <div id="photoPreview" class="photo-preview hidden">
+                    <img id="photoImage" src="" alt="Preview">
+                </div>
+                <div id="photoActions" class="photo-actions hidden">
+                    <button class="btn-primary" id="btnProcessPhoto">Interpretar Diagrama</button>
+                </div>
+                <div id="photoReviewContainer" class="photo-review hidden">
+                    <div class="photo-review-header">
+                        <h4>Resultado de la Interpretación</h4>
+                        <span id="photoConfidenceBadge" class="confidence-badge">Confianza: 85%</span>
+                    </div>
+                    <div id="photoReviewStats" class="photo-review-stats"></div>
+                    <div id="photoReviewNotes" class="photo-review-notes"></div>
+                    <div class="photo-review-actions">
+                        <button class="btn-primary" id="btnAcceptPhotoDiagram">✓ Aceptar e Importar al Lienzo</button>
+                        <button class="btn-secondary" id="btnDiscardPhotoDiagram">Descartar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Export Modal ─────────────────────────────────────────── -->
+    <div id="exportModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Exportar Diagrama</h3>
+                <button class="icon-btn" id="btnCloseExport">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 4L14 14M14 4L4 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+            <div class="modal-body export-modal-body">
+                <div class="export-options">
+                    <button class="export-option-card" id="btnExportJSON">
+                        <div class="export-option-icon">📄</div>
+                        <div class="export-option-info">
+                            <strong>GeneradorUML JSON</strong>
+                            <span>Formato nativo completo con posiciones visuales</span>
+                        </div>
+                    </button>
+                    <button class="export-option-card" id="btnExportXMI">
+                        <div class="export-option-icon">🔄</div>
+                        <div class="export-option-info">
+                            <strong>XMI 2.1 (ISO/IEC 19509)</strong>
+                            <span>Compatible con Enterprise Architect y StarUML</span>
+                        </div>
+                    </button>
+                    <button class="export-option-card" id="btnExportMDJ">
+                        <div class="export-option-icon">⭐</div>
+                        <div class="export-option-info">
+                            <strong>StarUML (.mdj)</strong>
+                            <span>Formato nativo de StarUML 3.x/4.x/5.x</span>
+                        </div>
+                    </button>
+                    <button class="export-option-card" id="btnExportSVG">
+                        <div class="export-option-icon">🖼️</div>
+                        <div class="export-option-info">
+                            <strong>Imagen SVG Vectorial</strong>
+                            <span>Gráfico vectorial escalable para documentación</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file inputs -->
+    <input type="file" id="importFileInput" accept=".json,.mdj,.xmi,.xml" class="hidden-input">
+
+    <script src="js/app.js"></script>
+</body>
+</html>
