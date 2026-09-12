@@ -156,6 +156,9 @@ class SpringBootGenerator:
         files[f"{src_base}/exception/GlobalExceptionHandler.java"] = self._generate_global_exception_handler()
         files[f"{src_base}/exception/BadRequestException.java"] = self._generate_bad_request_exception()
 
+        # Health
+        files[f"{src_base}/controller/HealthController.java"] = self._generate_health_controller()
+
         # Generate per-entity files
         for cls in self.diagram.classes:
             if cls.is_interface:
@@ -376,6 +379,32 @@ public class SwaggerConfig {{
                 .title("{self.diagram.name} API")
                 .version("1.0.0")
                 .description("API generada por GeneradorUML a partir del diagrama: {self.diagram.name}"));
+    }}
+}}
+"""
+
+    def _generate_health_controller(self) -> str:
+        return f"""package {self.base_package}.controller;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.Instant;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api")
+public class HealthController {{
+
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, Object>> health() {{
+        return ResponseEntity.ok(Map.of(
+            "status", "UP",
+            "message", "Backend Spring Boot en línea",
+            "timestamp", Instant.now().toString()
+        ));
     }}
 }}
 """

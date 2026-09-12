@@ -244,13 +244,13 @@ flutter run
 """
 
     def _generate_api_config(self) -> str:
-        return """import 'dart:convert';
+        return """import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 /// Configuración global de la API REST del backend Spring Boot.
 class ApiConfig {
-  /// URL base por defecto para el emulador Android (10.0.2.2 accede al localhost de la PC anfitriona).
-  static String baseUrl = 'http://10.0.2.2:8080/api';
+  /// URL base por defecto: localhost si corre en Web/Desktop, o 10.0.2.2 si corre en emulador Android.
+  static String baseUrl = kIsWeb ? 'http://localhost:8080/api' : 'http://10.0.2.2:8080/api';
 
   /// Timeout estándar para peticiones HTTP en segundos.
   static const Duration timeoutDuration = Duration(seconds: 10);
