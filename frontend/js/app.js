@@ -1544,47 +1544,72 @@ $('#btnApplyVoice').addEventListener('click', () => {
     $('#btnApplyVoice').disabled = true;
 });
 
+function toCamelCase(str) {
+    const parts = str.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0];
+    return parts[0].toLowerCase() + parts.slice(1).map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('');
+}
+
 function parseVoiceCommand(text) {
-    // "crear clase X"
-    let match = text.match(/crear\s+clase\s+(\w+)/i);
+    text = text.trim();
+
+    // 1. "crear (una|la)? clase (llamada)? X"
+    let match = text.match(/crear\s+(?:una\s+|la\s+)?clase\s+(?:llamada\s+)?([a-zA-Z0-9_\s]+)/i);
     if (match) {
-        const name = match[1].charAt(0).toUpperCase() + match[1].slice(1);
-        const cls = new UMLClassNode(name, 100 + Math.random() * 400, 100 + Math.random() * 300);
+        const rawName = match[1].trim();
+        const words = rawName.split(/\s+/);
+        // Capitalize class name in PascalCase
+        const name = words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('');
+        const cls = new UMLClassNode(name, 100 + Math.random() * 350, 100 + Math.random() * 250);
         state.model.addClass(cls);
         state.classCounter++;
-        return { success: true, message: `Clase "${name}" creada` };
+        return { success: true, message: `Clase "${name}" creada exitosamente` };
     }
 
-    // "agregar atributo X tipo Y a Z"
-    match = text.match(/agregar\s+atributo\s+(\w+)\s+tipo\s+(\w+)\s+a\s+(\w+)/i);
+    // 2. "agregar (un|el)? atributo <nombre> (de tipo|tipo) <tipo> (a|en|para) (la clase)? <clase>"
+    match = text.match(/agregar\s+(?:un\s+|el\s+)?atributo\s+(.+?)\s+(?:de\s+tipo|tipo)\s+(\w+)\s+(?:a|en|para)\s+(?:la\s+clase\s+)?(\w+)/i);
     if (match) {
-        const attrName = match[1];
+        const rawAttrName = match[1].trim();
+        const attrName = toCamelCase(rawAttrName);
         const attrType = match[2].charAt(0).toUpperCase() + match[2].slice(1);
-        const className = match[3].charAt(0).toUpperCase() + match[3].slice(1);
-        const cls = state.model.classes.find(c => c.name.toLowerCase() === className.toLowerCase());
-        if (cls) {
-            cls.addAttribute({ id: crypto.randomUUID(), name: attrName, type: attrType, visibility: '-', constraints: [] });
-            return { success: true, message: `Atributo "${attrName}: ${attrType}" agregado a "${cls.name}"` };
+        const rawClassName = match[3].trim();
+        const className = rawClassName.charAt(0).toUpperCase() + rawClassName.slice(1);
+
+        let cls = state.model.classes.find(c => c.name.toLowerCase() === className.toLowerCase());
+        let autoCreatedMsg = '';
+        if (!cls) {
+            // Auto-crear la clase si no existía previamente
+            cls = new UMLClassNode(className, 100 + Math.random() * 350, 100 + Math.random() * 250);
+            state.model.addClass(cls);
+            state.classCounter++;
+            autoCreatedMsg = ` (Clase "${className}" creada automáticamente)`;
         }
-        return { success: false, message: `Clase "${className}" no encontrada` };
+
+        cls.addAttribute({ id: crypto.randomUUID(), name: attrName, type: attrType, visibility: '-', constraints: [] });
+        return { success: true, message: `Atributo "${attrName}: ${attrType}" agregado a "${cls.name}"${autoCreatedMsg}` };
     }
 
-    // "agregar operación X a Y que retorna Z"
-    match = text.match(/agregar\s+operaci[oó]n\s+(\w+)\s+a\s+(\w+)(?:\s+que\s+retorna\s+(\w+))?/i);
+    // 3. "agregar (una|la)? operación <nombre> (a|en) <clase> (que retorna)? <tipo>"
+    match = text.match(/agregar\s+(?:una\s+|la\s+)?operaci[oó]n\s+(.+?)\s+(?:a|en)\s+(?:la\s+clase\s+)?(\w+)(?:\s+(?:que\s+)?retorna\s+(\w+))?/i);
     if (match) {
-        const opName = match[1];
-        const className = match[2].charAt(0).toUpperCase() + match[2].slice(1);
+        const rawOpName = match[1].trim();
+        const opName = toCamelCase(rawOpName);
+        const rawClassName = match[2].trim();
+        const className = rawClassName.charAt(0).toUpperCase() + rawClassName.slice(1);
         const returnType = match[3] ? match[3].charAt(0).toUpperCase() + match[3].slice(1) : 'void';
-        const cls = state.model.classes.find(c => c.name.toLowerCase() === className.toLowerCase());
-        if (cls) {
-            cls.addOperation({ id: crypto.randomUUID(), name: opName, parameters: [], returnType, visibility: '+' });
-            return { success: true, message: `Operación "${opName}(): ${returnType}" agregada a "${cls.name}"` };
+
+        let cls = state.model.classes.find(c => c.name.toLowerCase() === className.toLowerCase());
+        if (!cls) {
+            cls = new UMLClassNode(className, 100 + Math.random() * 350, 100 + Math.random() * 250);
+            state.model.addClass(cls);
+            state.classCounter++;
         }
-        return { success: false, message: `Clase "${className}" no encontrada` };
+        cls.addOperation({ id: crypto.randomUUID(), name: opName, parameters: [], returnType, visibility: '+' });
+        return { success: true, message: `Operación "${opName}(): ${returnType}" agregada a "${cls.name}"` };
     }
 
-    // "crear relación de X de Y a Z"
-    match = text.match(/crear\s+relaci[oó]n\s+de\s+(\w+)\s+de\s+(\w+)\s+a\s+(\w+)/i);
+    // 4. "crear relación (de)? <tipo> (de|desde) <origen> (a|hacia) <destino>"
+    match = text.match(/crear\s+(?:una\s+)?relaci[oó]n\s+(?:de\s+)?(\w+)\s+(?:de|desde)\s+(?:la\s+clase\s+)?(\w+)\s+(?:a|hacia)\s+(?:la\s+clase\s+)?(\w+)/i);
     if (match) {
         const relTypeMap = {
             'asociación': 'association', 'asociacion': 'association',
@@ -1606,7 +1631,7 @@ function parseVoiceCommand(text) {
             state.model.addRelationship(rel);
             return { success: true, message: `Relación de ${match[1]} creada de "${sourceCls.name}" a "${targetCls.name}"` };
         }
-        return { success: false, message: `Clases no encontradas: "${sourceName}" o "${targetName}"` };
+        return { success: false, message: `Clases no encontradas en el lienzo: "${sourceName}" o "${targetName}"` };
     }
 
     return { success: false, message: `Comando no reconocido: "${text}"` };
