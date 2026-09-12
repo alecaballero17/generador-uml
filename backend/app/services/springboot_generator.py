@@ -281,6 +281,19 @@ class SpringBootGenerator:
     <build>
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${{lombok.version}}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
@@ -599,7 +612,9 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
                 if not target_cls:
                     continue
                 target_name = to_pascal_case(target_cls.name)
-                field_name = to_camel_case(rel.target.role or target_cls.name)
+                is_collection = (rel.target.multiplicity in ("*", "0..*", "1..*") or
+                                 rel.type in (RelationshipType.COMPOSITION, RelationshipType.AGGREGATION))
+                field_name = to_camel_case(rel.target.role or (pluralize(target_cls.name) if is_collection else target_cls.name))
 
                 field = self._build_jpa_field(
                     rel, "source", target_name, field_name,
@@ -613,7 +628,8 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
                 if not source_cls:
                     continue
                 source_name = to_pascal_case(source_cls.name)
-                field_name = to_camel_case(rel.source.role or pluralize(source_cls.name))
+                is_collection = rel.source.multiplicity in ("*", "0..*", "1..*")
+                field_name = to_camel_case(rel.source.role or (pluralize(source_cls.name) if is_collection else source_cls.name))
 
                 field = self._build_jpa_field(
                     rel, "target", source_name, field_name,
@@ -634,32 +650,32 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
 
         annotations = []
 
+        # Calculate the field name used by the other side to point back to this entity
+        if side == "source":
+            other_role = rel.source.role or rel.target.role
+            source_name = self.diagram.get_class(rel.source.class_id).name if self.diagram.get_class(rel.source.class_id) else related_class
+            inverse_field_name = to_camel_case(other_role or source_name)
+        else:
+            other_role = rel.target.role or rel.source.role
+            target_name = self.diagram.get_class(rel.target.class_id).name if self.diagram.get_class(rel.target.class_id) else related_class
+            inverse_field_name = to_camel_case(other_role or target_name)
+
         if rel.type == RelationshipType.COMPOSITION:
             if side == "source":
-                # Owner side: OneToMany with cascade ALL and orphanRemoval
-                annotations.append(
-                    f'    @OneToMany(mappedBy = "{to_camel_case(self.diagram.get_class(rel.source.class_id).name if side == "target" else self.diagram.get_class(rel.target.class_id).name)}", '
-                    f'cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)'
-                )
-                # Actually, for composition, the "source" owns the "target" list
-                # Let me fix the logic:
-                mapped_by = to_camel_case(self.diagram.get_class(rel.source.class_id).name)
                 annotations = [
-                    f'    @OneToMany(mappedBy = "{mapped_by}", '
+                    f'    @OneToMany(mappedBy = "{inverse_field_name}", '
                     f'cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)'
                 ]
                 return "\n".join(annotations) + f"\n    private List<{related_class}> {field_name} = new ArrayList<>();"
             else:
-                # Inverse side: ManyToOne
                 annotations.append(f'    @ManyToOne(fetch = FetchType.LAZY)')
                 annotations.append(f'    @JoinColumn(name = "{to_snake_case(related_class)}_id", nullable = false)')
                 return "\n".join(annotations) + f"\n    private {related_class} {field_name};"
 
         elif rel.type == RelationshipType.AGGREGATION:
             if side == "source":
-                mapped_by = to_camel_case(self.diagram.get_class(rel.source.class_id).name)
                 annotations = [
-                    f'    @OneToMany(mappedBy = "{mapped_by}", '
+                    f'    @OneToMany(mappedBy = "{inverse_field_name}", '
                     f'cascade = {{CascadeType.PERSIST, CascadeType.MERGE}}, fetch = FetchType.LAZY)'
                 ]
                 return "\n".join(annotations) + f"\n    private List<{related_class}> {field_name} = new ArrayList<>();"
@@ -676,8 +692,7 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
                     annotations.append(f'    @JoinColumn(name = "{to_snake_case(related_class)}_id")')
                     return "\n".join(annotations) + f"\n    private {related_class} {field_name};"
                 else:
-                    source_cls_name = to_camel_case(self.diagram.get_class(rel.source.class_id).name)
-                    annotations.append(f'    @OneToOne(mappedBy = "{source_cls_name}", fetch = FetchType.LAZY)')
+                    annotations.append(f'    @OneToOne(mappedBy = "{inverse_field_name}", fetch = FetchType.LAZY)')
                     return "\n".join(annotations) + f"\n    private {related_class} {field_name};"
 
             elif this_many and other_many:
@@ -690,31 +705,19 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
                     annotations.append(f'        inverseJoinColumns = @JoinColumn(name = "{to_snake_case(related_class)}_id"))')
                     return "\n".join(annotations) + f"\n    private Set<{related_class}> {field_name} = new HashSet<>();"
                 else:
-                    mapped_by = to_camel_case(self.diagram.get_class(rel.source.class_id).name)
                     annotations.append(f'    @ManyToMany(mappedBy = "{field_name}", fetch = FetchType.LAZY)')
                     return "\n".join(annotations) + f"\n    private Set<{related_class}> {field_name} = new HashSet<>();"
 
             elif other_many:
-                # This side is "one", other side is "many" -> ManyToOne on this side
+                # This side is "one", other side is "many" -> OneToMany on this side
+                annotations.append(f'    @OneToMany(mappedBy = "{inverse_field_name}", fetch = FetchType.LAZY)')
+                return "\n".join(annotations) + f"\n    private List<{related_class}> {field_name} = new ArrayList<>();"
+
+            else:
+                # This side is "many", other side is "one" -> ManyToOne on this side
                 annotations.append(f'    @ManyToOne(fetch = FetchType.LAZY)')
                 annotations.append(f'    @JoinColumn(name = "{to_snake_case(related_class)}_id")')
                 return "\n".join(annotations) + f"\n    private {related_class} {field_name};"
-
-            else:
-                # This side is "many", other side is "one" -> OneToMany on this side
-                mapped_by_cls = self.diagram.get_class(
-                    rel.target.class_id if side == "source" else rel.source.class_id
-                )
-                if mapped_by_cls:
-                    mapped_by = to_camel_case(
-                        self.diagram.get_class(rel.source.class_id if side == "target" else rel.target.class_id).name
-                    )
-                    # Actually this side already has "many", so we are the collection side
-                    mapped_by_field = to_camel_case(self.diagram.get_class(
-                        rel.source.class_id if side == "target" else rel.target.class_id
-                    ).name)
-                    annotations.append(f'    @OneToMany(mappedBy = "{mapped_by_field}", fetch = FetchType.LAZY)')
-                    return "\n".join(annotations) + f"\n    private List<{related_class}> {field_name} = new ArrayList<>();"
 
         return None
 
@@ -729,6 +732,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 @Repository
 public interface {class_name}Repository extends JpaRepository<{class_name}, Long> {{
@@ -1024,7 +1030,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.bean.MockBean;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
