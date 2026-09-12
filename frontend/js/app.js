@@ -1375,14 +1375,77 @@ $('#btnExportMDJ').addEventListener('click', async () => {
     }
 });
 
+function generateStandaloneSVG() {
+    if (state.model.classes.length === 0) {
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="100%" height="100%" fill="#12121a"/><text x="200" y="100" fill="#a0a0b8" text-anchor="middle" font-family="sans-serif">Diagrama vacío</text></svg>';
+    }
+
+    // Calculate bounding box of all classes
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const cls of state.model.classes) {
+        minX = Math.min(minX, cls.position.x);
+        minY = Math.min(minY, cls.position.y);
+        maxX = Math.max(maxX, cls.position.x + cls.size.width);
+        maxY = Math.max(maxY, cls.position.y + cls.size.height);
+    }
+
+    const pad = 60;
+    const vbX = Math.floor(Math.max(0, minX - pad));
+    const vbY = Math.floor(Math.max(0, minY - pad));
+    const vbW = Math.ceil((maxX - vbX) + pad);
+    const vbH = Math.ceil((maxY - vbY) + pad);
+
+    // Clone the diagram layer
+    const diagramLayer = $('#diagramLayer').cloneNode(true);
+    diagramLayer.setAttribute('transform', 'translate(0,0) scale(1)');
+
+    // Remove interactive connection points
+    diagramLayer.querySelectorAll('.connection-point').forEach(el => el.remove());
+
+    const serializer = new XMLSerializer();
+    const layerContent = serializer.serializeToString(diagramLayer);
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vbX} ${vbY} ${vbW} ${vbH}" width="${vbW}" height="${vbH}">
+  <defs>
+    <style>
+      .class-border { fill: #1e1e2e; stroke: #4f46e5; stroke-width: 1.5; rx: 6px; }
+      .class-header-bg { rx: 6px; }
+      .class-name-text { fill: #ffffff; font-family: 'Inter', system-ui, -apple-system, sans-serif; font-size: 13px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+      .class-stereotype-text { fill: #c084fc; font-family: 'Inter', system-ui, -apple-system, sans-serif; font-size: 10px; font-style: italic; text-anchor: middle; dominant-baseline: central; }
+      .class-attr-text { fill: #cbd5e1; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 11px; dominant-baseline: central; }
+      .class-op-text { fill: #94a3b8; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 11px; dominant-baseline: central; }
+      .class-divider { stroke: #3a3a54; stroke-width: 1; opacity: 0.8; }
+      .rel-line { stroke: #94a3b8; stroke-width: 1.5; fill: none; }
+      .rel-mult { fill: #a0a0b8; font-family: 'Inter', system-ui, sans-serif; font-size: 11px; }
+      .rel-label { fill: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; font-size: 11px; font-style: italic; text-anchor: middle; }
+    </style>
+    <!-- Arrow markers for relationships -->
+    <marker id="arrowOpen" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+        <path d="M0,0 L10,3.5 L0,7" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    </marker>
+    <marker id="arrowClosed" markerWidth="12" markerHeight="8" refX="12" refY="4" orient="auto">
+        <path d="M0,0 L12,4 L0,8 Z" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    </marker>
+    <marker id="diamondEmpty" markerWidth="14" markerHeight="8" refX="0" refY="4" orient="auto">
+        <path d="M0,4 L7,0 L14,4 L7,8 Z" fill="#12121a" stroke="#94a3b8" stroke-width="1.5"/>
+    </marker>
+    <marker id="diamondFull" markerWidth="14" markerHeight="8" refX="0" refY="4" orient="auto">
+        <path d="M0,4 L7,0 L14,4 L7,8 Z" fill="#94a3b8" stroke="#94a3b8" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <!-- Background Rect for standalone viewing -->
+  <rect x="${vbX}" y="${vbY}" width="${vbW}" height="${vbH}" fill="#12121a" rx="8"/>
+  ${layerContent}
+</svg>`;
+}
+
 $('#btnExportSVG').addEventListener('click', () => {
     try {
-        const svg = $('#canvas');
-        const serializer = new XMLSerializer();
-        const svgStr = serializer.serializeToString(svg);
+        const svgStr = generateStandaloneSVG();
         downloadFile(`${state.model.name.replace(/ /g, '_')}.svg`, svgStr, 'image/svg+xml');
         $('#exportModal').classList.add('hidden');
-        showToast('Diagrama exportado como imagen SVG vectorial', 'success');
+        showToast('Diagrama exportado como imagen SVG autónoma', 'success');
     } catch (err) {
         showToast(`Error exportando SVG: ${err.message}`, 'error');
     }
