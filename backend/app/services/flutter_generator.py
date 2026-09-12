@@ -611,40 +611,38 @@ class _DashboardScreenState extends State<DashboardScreen> {{
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
-                  children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 28,
-                          backgroundColor: colorScheme.primary,
-                          child: const Icon(Icons.mic, color: Colors.white, size: 28),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Asistente de Voz e IA',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: colorScheme.onPrimaryContainer,
-                                ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: colorScheme.primary,
+                        child: const Icon(Icons.mic, color: Colors.white, size: 28),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Asistente de Voz e IA',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.onPrimaryContainer,
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Consulta datos o dicta comandos en lenguaje natural',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onPrimaryContainer.withOpacity(0.8),
-                                ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Consulta datos o dicta comandos en lenguaje natural',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onPrimaryContainer.withOpacity(0.8),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        const Icon(Icons.arrow_forward_ios, size: 16),
-                      ],
-                    ),
-                  ],
+                      ),
+                      const Icon(Icons.arrow_forward_ios, size: 16),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -944,7 +942,7 @@ class _ChatMessage {{
         for attr in attributes:
             dtype = self._dart_type(attr.type)
             is_pk = (attr.name == pk.name)
-            is_nullable = is_pk  # el ID puede ser null al crearse
+            is_nullable = is_pk or dtype in ("DateTime", "int", "double") or getattr(attr, 'is_optional', False)
 
             null_mark = "?" if is_nullable else ""
             fields_decl.append(f"  final {dtype}{null_mark} {attr.name};")
