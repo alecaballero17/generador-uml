@@ -233,7 +233,12 @@ class PhotoInterpreter:
             denoised = cv2.fastNlMeansDenoising(resized, h=10)
             text = pytesseract.image_to_string(denoised, config="--psm 6")
             return text.strip()
-        except Exception:
+        except Exception as e:
+            err_str = str(e).lower()
+            if "tesseract is not installed" in err_str or "not in your path" in err_str:
+                warn = "Tesseract OCR no está en el PATH del sistema. Se detectó la geometría de las cajas. Para extracción completa de texto, instale Tesseract OCR."
+                if warn not in self.warnings:
+                    self.warnings.append(warn)
             return ""
 
     def _parse_class_text(self, text: str, box: DetectedBox) -> UMLClass:

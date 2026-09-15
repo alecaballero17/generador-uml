@@ -247,11 +247,15 @@ Por defecto, la app está configurada para conectar a:
 
 ## Ejecución
 ```bash
-# 1. Instalar dependencias
+# 1. Crear las carpetas de plataforma nativa (Web, Windows, Android):
+flutter create .
+
+# 2. Instalar dependencias
 flutter pub get
 
-# 2. Ejecutar en emulador o dispositivo conectado
-flutter run
+# 3. Ejecutar en Chrome (Web), emulador o dispositivo
+flutter run -d chrome
+# o en móvil: flutter run
 ```
 
 ## Características
