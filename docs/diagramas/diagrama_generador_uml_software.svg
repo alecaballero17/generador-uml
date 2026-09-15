@@ -1,0 +1,258 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1520 1020" width="100%" height="100%" style="background:#090d16; font-family:'Segoe UI',Roboto,Helvetica,sans-serif;">
+  <defs>
+    <linearGradient id="coreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="genGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#047857"/>
+    </linearGradient>
+    <linearGradient id="toolGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
+    </linearGradient>
+    <filter id="boxShadow" x="-5%" y="-5%" width="115%" height="115%">
+      <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 9 5 L 0 9" fill="none" stroke="#94a3b8" stroke-width="1.8"/>
+    </marker>
+    <marker id="diamond" viewBox="0 0 12 12" refX="0" refY="6" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 6 L 6 1 L 12 6 L 6 11 Z" fill="#38bdf8" stroke="#7dd3fc" stroke-width="1"/>
+    </marker>
+  </defs>
+
+  <text x="50" y="45" font-size="24" font-weight="bold" fill="#f1f5f9">🛠️ Arquitectura Interna del Software — GeneradorUML CASE Tool</text>
+  <text x="50" y="70" font-size="13" fill="#64748b">Diagrama de Clases UML 2.5+ del backend (FastAPI, Metamodelo, Validadores, Generadores Spring Boot/Flutter, Adaptadores)</text>
+
+  <!-- SECCION 1: METAMODELO UML -->
+  <rect x="40" y="90" width="700" height="900" rx="14" fill="#0f172a" stroke="#1e293b" stroke-width="2"/>
+  <text x="60" y="120" font-size="15" font-weight="bold" fill="#60a5fa">PAQUETE: Metamodelo UML 2.5 (backend/app/models/uml_model.py)</text>
+
+  <!-- UMLDiagram (x:60, y:140, w:280, h:170) -->
+  <g filter="url(#boxShadow)">
+    <rect x="60" y="140" width="280" height="170" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="60" y="140" width="280" height="34" rx="8" fill="url(#coreGrad)"/>
+    <rect x="60" y="164" width="280" height="10" fill="url(#coreGrad)"/>
+    <text x="200" y="162" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">UMLDiagram</text>
+    <text x="72" y="192" font-size="11" fill="#cbd5e1">+ id : String</text>
+    <text x="72" y="208" font-size="11" fill="#cbd5e1">+ name : String</text>
+    <text x="72" y="224" font-size="11" fill="#cbd5e1">+ classes : List&lt;UMLClass&gt;</text>
+    <text x="72" y="240" font-size="11" fill="#cbd5e1">+ relationships : List&lt;UMLRelationship&gt;</text>
+    <line x1="60" y1="248" x2="340" y2="248" stroke="#334155"/>
+    <text x="72" y="266" font-size="11" fill="#38bdf8">+ to_dict() : dict</text>
+    <text x="72" y="282" font-size="11" fill="#38bdf8">+ from_dict(data) : UMLDiagram</text>
+    <text x="72" y="298" font-size="11" fill="#38bdf8">+ find_class(id) : UMLClass</text>
+  </g>
+
+  <!-- UMLClass (x:60, y:360, w:280, h:180) -->
+  <g filter="url(#boxShadow)">
+    <rect x="60" y="360" width="280" height="180" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="60" y="360" width="280" height="34" rx="8" fill="url(#coreGrad)"/>
+    <rect x="60" y="384" width="280" height="10" fill="url(#coreGrad)"/>
+    <text x="200" y="382" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">UMLClass</text>
+    <text x="72" y="412" font-size="11" fill="#cbd5e1">+ id : String</text>
+    <text x="72" y="428" font-size="11" fill="#cbd5e1">+ name : String</text>
+    <text x="72" y="444" font-size="11" fill="#cbd5e1">+ visibility : Visibility</text>
+    <text x="72" y="460" font-size="11" fill="#cbd5e1">+ is_abstract : bool</text>
+    <text x="72" y="476" font-size="11" fill="#cbd5e1">+ is_interface : bool</text>
+    <line x1="60" y1="484" x2="340" y2="484" stroke="#334155"/>
+    <text x="72" y="502" font-size="11" fill="#38bdf8">+ add_attribute(attr) : void</text>
+    <text x="72" y="518" font-size="11" fill="#38bdf8">+ add_operation(op) : void</text>
+    <text x="72" y="534" font-size="11" fill="#38bdf8">+ to_dict() : dict</text>
+  </g>
+
+  <!-- UMLAttribute (x:60, y:590, w:280, h:150) -->
+  <g filter="url(#boxShadow)">
+    <rect x="60" y="590" width="280" height="150" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="60" y="590" width="280" height="34" rx="8" fill="url(#coreGrad)"/>
+    <rect x="60" y="614" width="280" height="10" fill="url(#coreGrad)"/>
+    <text x="200" y="612" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">UMLAttribute</text>
+    <text x="72" y="642" font-size="11" fill="#cbd5e1">+ id : String</text>
+    <text x="72" y="658" font-size="11" fill="#cbd5e1">+ name : String</text>
+    <text x="72" y="674" font-size="11" fill="#cbd5e1">+ type : String</text>
+    <text x="72" y="690" font-size="11" fill="#cbd5e1">+ visibility : Visibility</text>
+    <text x="72" y="706" font-size="11" fill="#cbd5e1">+ default_value : String</text>
+    <line x1="60" y1="714" x2="340" y2="714" stroke="#334155"/>
+    <text x="72" y="730" font-size="11" fill="#38bdf8">+ to_dict() : dict</text>
+  </g>
+
+  <!-- UMLOperation (x:60, y:780, w:280, h:180) -->
+  <g filter="url(#boxShadow)">
+    <rect x="60" y="780" width="280" height="180" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="60" y="780" width="280" height="34" rx="8" fill="url(#coreGrad)"/>
+    <rect x="60" y="804" width="280" height="10" fill="url(#coreGrad)"/>
+    <text x="200" y="802" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">UMLOperation</text>
+    <text x="72" y="832" font-size="11" fill="#cbd5e1">+ id : String</text>
+    <text x="72" y="848" font-size="11" fill="#cbd5e1">+ name : String</text>
+    <text x="72" y="864" font-size="11" fill="#cbd5e1">+ return_type : String</text>
+    <text x="72" y="880" font-size="11" fill="#cbd5e1">+ parameters : List&lt;UMLParameter&gt;</text>
+    <text x="72" y="896" font-size="11" fill="#cbd5e1">+ is_abstract : bool</text>
+    <line x1="60" y1="904" x2="340" y2="904" stroke="#334155"/>
+    <text x="72" y="922" font-size="11" fill="#38bdf8">+ to_dict() : dict</text>
+    <text x="72" y="938" font-size="11" fill="#38bdf8">+ from_dict(data) : UMLOperation</text>
+  </g>
+
+  <!-- UMLRelationship (x:410, y:140, w:290, h:160) -->
+  <g filter="url(#boxShadow)">
+    <rect x="410" y="140" width="290" height="160" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="410" y="140" width="290" height="34" rx="8" fill="url(#coreGrad)"/>
+    <rect x="410" y="164" width="290" height="10" fill="url(#coreGrad)"/>
+    <text x="555" y="162" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">UMLRelationship</text>
+    <text x="422" y="192" font-size="11" fill="#cbd5e1">+ id : String</text>
+    <text x="422" y="208" font-size="11" fill="#cbd5e1">+ type : RelationshipType</text>
+    <text x="422" y="224" font-size="11" fill="#cbd5e1">+ source : RelationshipEnd</text>
+    <text x="422" y="240" font-size="11" fill="#cbd5e1">+ target : RelationshipEnd</text>
+    <text x="422" y="256" font-size="11" fill="#cbd5e1">+ name : String</text>
+    <line x1="410" y1="264" x2="700" y2="264" stroke="#334155"/>
+    <text x="422" y="282" font-size="11" fill="#38bdf8">+ to_dict() : dict</text>
+  </g>
+
+  <!-- RelationshipEnd (x:410, y:360, w:290, h:150) -->
+  <g filter="url(#boxShadow)">
+    <rect x="410" y="360" width="290" height="150" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="410" y="360" width="290" height="34" rx="8" fill="url(#coreGrad)"/>
+    <rect x="410" y="384" width="290" height="10" fill="url(#coreGrad)"/>
+    <text x="555" y="382" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">RelationshipEnd</text>
+    <text x="422" y="412" font-size="11" fill="#cbd5e1">+ class_id : String</text>
+    <text x="422" y="428" font-size="11" fill="#cbd5e1">+ role : String</text>
+    <text x="422" y="444" font-size="11" fill="#cbd5e1">+ multiplicity : String</text>
+    <text x="422" y="460" font-size="11" fill="#cbd5e1">+ navigable : bool</text>
+    <line x1="410" y1="468" x2="700" y2="468" stroke="#334155"/>
+    <text x="422" y="488" font-size="11" fill="#38bdf8">+ to_dict() : dict</text>
+  </g>
+
+  <!-- UMLValidator (x:410, y:560, w:290, h:180) -->
+  <g filter="url(#boxShadow)">
+    <rect x="410" y="560" width="290" height="180" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="410" y="560" width="290" height="34" rx="8" fill="url(#toolGrad)"/>
+    <rect x="410" y="584" width="290" height="10" fill="url(#toolGrad)"/>
+    <text x="555" y="582" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">UMLValidator</text>
+    <text x="422" y="612" font-size="11" fill="#cbd5e1">- diagram : UMLDiagram</text>
+    <line x1="410" y1="620" x2="700" y2="620" stroke="#334155"/>
+    <text x="422" y="638" font-size="11" fill="#a78bfa">+ validate() : ValidationResult</text>
+    <text x="422" y="654" font-size="11" fill="#a78bfa">- check_circular_inheritance()</text>
+    <text x="422" y="670" font-size="11" fill="#a78bfa">- check_duplicate_names()</text>
+    <text x="422" y="686" font-size="11" fill="#a78bfa">- check_broken_relationships()</text>
+    <text x="422" y="702" font-size="11" fill="#a78bfa">- check_multiplicities()</text>
+  </g>
+
+  <!-- SECCION 2: GENERADORES Y SERVICIOS -->
+  <rect x="770" y="90" width="710" height="900" rx="14" fill="#0f172a" stroke="#1e293b" stroke-width="2"/>
+  <text x="790" y="120" font-size="15" font-weight="bold" fill="#34d399">PAQUETE: Generadores y Adaptadores (backend/app/services/)</text>
+
+  <!-- SpringBootGenerator (x:790, y:140, w:330, h:240) -->
+  <g filter="url(#boxShadow)">
+    <rect x="790" y="140" width="330" height="240" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="790" y="140" width="330" height="34" rx="8" fill="url(#genGrad)"/>
+    <rect x="790" y="164" width="330" height="10" fill="url(#genGrad)"/>
+    <text x="955" y="162" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">SpringBootGenerator</text>
+    <text x="802" y="192" font-size="11" fill="#cbd5e1">- diagram : UMLDiagram</text>
+    <text x="802" y="208" font-size="11" fill="#cbd5e1">- base_package : String</text>
+    <text x="802" y="224" font-size="11" fill="#cbd5e1">- output_dir : String</text>
+    <line x1="790" y1="232" x2="1120" y2="232" stroke="#334155"/>
+    <text x="802" y="250" font-size="11" fill="#34d399">+ generate() : dict</text>
+    <text x="802" y="266" font-size="11" fill="#34d399">+ generate_to_disk(path) : list</text>
+    <text x="802" y="282" font-size="11" fill="#34d399">- _generate_entity(cls) : String</text>
+    <text x="802" y="298" font-size="11" fill="#34d399">- _generate_repository(cls) : String</text>
+    <text x="802" y="314" font-size="11" fill="#34d399">- _generate_service(cls) : String</text>
+    <text x="802" y="330" font-size="11" fill="#34d399">- _generate_controller(cls) : String</text>
+    <text x="802" y="346" font-size="11" fill="#34d399">- _generate_sql_schema() : String (PostgreSQL)</text>
+  </g>
+
+  <!-- FlutterGenerator (x:790, y:410, w:330, h:240) -->
+  <g filter="url(#boxShadow)">
+    <rect x="790" y="410" width="330" height="240" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="790" y="410" width="330" height="34" rx="8" fill="url(#coreGrad)"/>
+    <rect x="790" y="434" width="330" height="10" fill="url(#coreGrad)"/>
+    <text x="955" y="432" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">FlutterGenerator</text>
+    <text x="802" y="462" font-size="11" fill="#cbd5e1">- diagram : UMLDiagram</text>
+    <text x="802" y="478" font-size="11" fill="#cbd5e1">- app_name : String</text>
+    <text x="802" y="494" font-size="11" fill="#cbd5e1">- package_name : String</text>
+    <line x1="790" y1="502" x2="1120" y2="502" stroke="#334155"/>
+    <text x="802" y="520" font-size="11" fill="#38bdf8">+ generate_all() : dict</text>
+    <text x="802" y="536" font-size="11" fill="#38bdf8">+ generate_to_disk(path) : list</text>
+    <text x="802" y="552" font-size="11" fill="#38bdf8">- _generate_model(cls) : String</text>
+    <text x="802" y="568" font-size="11" fill="#38bdf8">- _generate_service(cls) : String</text>
+    <text x="802" y="584" font-size="11" fill="#38bdf8">- _generate_list_screen(cls) : String</text>
+    <text x="802" y="600" font-size="11" fill="#38bdf8">- _generate_offline_cache() : String (Prefs)</text>
+    <text x="802" y="616" font-size="11" fill="#38bdf8">- _generate_assistant() : String (STT)</text>
+  </g>
+
+  <!-- PostmanGenerator (x:790, y:680, w:330, h:130) -->
+  <g filter="url(#boxShadow)">
+    <rect x="790" y="680" width="330" height="130" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="790" y="680" width="330" height="34" rx="8" fill="url(#genGrad)"/>
+    <rect x="790" y="704" width="330" height="10" fill="url(#genGrad)"/>
+    <text x="955" y="702" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">PostmanGenerator</text>
+    <text x="802" y="732" font-size="11" fill="#cbd5e1">- diagram : UMLDiagram</text>
+    <line x1="790" y1="740" x2="1120" y2="740" stroke="#334155"/>
+    <text x="802" y="758" font-size="11" fill="#34d399">+ generate_dict() : dict</text>
+    <text x="802" y="774" font-size="11" fill="#34d399">+ generate_json() : String (Postman v2.1)</text>
+  </g>
+
+  <!-- XMIAdapter (x:1150, y:140, w:310, h:140) -->
+  <g filter="url(#boxShadow)">
+    <rect x="1150" y="140" width="310" height="140" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="1150" y="140" width="310" height="34" rx="8" fill="url(#toolGrad)"/>
+    <rect x="1150" y="164" width="310" height="10" fill="url(#toolGrad)"/>
+    <text x="1305" y="162" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">XMIAdapter (ISO/IEC 19509)</text>
+    <text x="1162" y="192" font-size="11" fill="#cbd5e1">Soporte OMG XMI 2.1 bidireccional</text>
+    <line x1="1150" y1="200" x2="1460" y2="200" stroke="#334155"/>
+    <text x="1162" y="218" font-size="11" fill="#a78bfa">+ export_to_xmi(diag) : String</text>
+    <text x="1162" y="234" font-size="11" fill="#a78bfa">+ import_from_xmi(xml) : UMLDiagram</text>
+    <text x="1162" y="250" font-size="11" fill="#94a3b8">Enterprise Architect / StarUML</text>
+  </g>
+
+  <!-- MDJAdapter (x:1150, y:300, w:310, h:140) -->
+  <g filter="url(#boxShadow)">
+    <rect x="1150" y="300" width="310" height="140" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="1150" y="300" width="310" height="34" rx="8" fill="url(#toolGrad)"/>
+    <rect x="1150" y="324" width="310" height="10" fill="url(#toolGrad)"/>
+    <text x="1305" y="322" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">MDJAdapter (StarUML)</text>
+    <text x="1162" y="352" font-size="11" fill="#cbd5e1">Soporte nativo StarUML 3.x/4.x/5.x</text>
+    <line x1="1150" y1="360" x2="1460" y2="360" stroke="#334155"/>
+    <text x="1162" y="378" font-size="11" fill="#a78bfa">+ export_to_mdj(diag) : String</text>
+    <text x="1162" y="394" font-size="11" fill="#a78bfa">+ import_from_mdj(json) : UMLDiagram</text>
+  </g>
+
+  <!-- PhotoInterpreter (x:1150, y:460, w:310, h:150) -->
+  <g filter="url(#boxShadow)">
+    <rect x="1150" y="460" width="310" height="150" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="1150" y="460" width="310" height="34" rx="8" fill="url(#toolGrad)"/>
+    <rect x="1150" y="484" width="310" height="10" fill="url(#toolGrad)"/>
+    <text x="1305" y="482" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">PhotoInterpreter (CV + OCR)</text>
+    <text x="1162" y="512" font-size="11" fill="#cbd5e1">- tesseract_available : bool</text>
+    <text x="1162" y="528" font-size="11" fill="#cbd5e1">- cv2_available : bool</text>
+    <line x1="1150" y1="536" x2="1460" y2="536" stroke="#334155"/>
+    <text x="1162" y="554" font-size="11" fill="#a78bfa">+ interpret_image(bytes) : dict</text>
+    <text x="1162" y="570" font-size="11" fill="#a78bfa">+ interpret_numpy_image(img) : dict</text>
+  </g>
+
+  <!-- ConnectionManager (x:1150, y:630, w:310, h:160) -->
+  <g filter="url(#boxShadow)">
+    <rect x="1150" y="630" width="310" height="160" rx="8" fill="#1e293b" stroke="#334155"/>
+    <rect x="1150" y="630" width="310" height="34" rx="8" fill="url(#toolGrad)"/>
+    <rect x="1150" y="654" width="310" height="10" fill="url(#toolGrad)"/>
+    <text x="1305" y="652" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">ConnectionManager (WebSockets)</text>
+    <text x="1162" y="682" font-size="11" fill="#cbd5e1">- active_connections : dict</text>
+    <text x="1162" y="698" font-size="11" fill="#cbd5e1">- user_roles : dict (admin/editor/viewer)</text>
+    <line x1="1150" y1="706" x2="1460" y2="706" stroke="#334155"/>
+    <text x="1162" y="724" font-size="11" fill="#a78bfa">+ connect(ws, project, user, role)</text>
+    <text x="1162" y="740" font-size="11" fill="#a78bfa">+ disconnect(ws, project)</text>
+    <text x="1162" y="756" font-size="11" fill="#a78bfa">+ broadcast(project, message)</text>
+  </g>
+
+  <!-- Conectores y Rombos de Composición del Metamodelo -->
+  <path d="M 200 310 L 200 360" stroke="#38bdf8" stroke-width="2" marker-start="url(#diamond)"/>
+  <path d="M 340 220 L 410 220" stroke="#38bdf8" stroke-width="2" marker-start="url(#diamond)"/>
+  <path d="M 200 540 L 200 590" stroke="#38bdf8" stroke-width="2" marker-start="url(#diamond)"/>
+  <path d="M 200 740 L 200 780" stroke="#38bdf8" stroke-width="2" marker-start="url(#diamond)"/>
+  <path d="M 555 300 L 555 360" stroke="#38bdf8" stroke-width="2" marker-start="url(#diamond)"/>
+
+  <!-- Flechas de Dependencia hacia los Generadores -->
+  <path d="M 700 620 L 770 620 L 770 260 L 790 260" stroke="#94a3b8" stroke-dasharray="4,4" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <path d="M 340 180 L 770 180 L 770 480 L 790 480" stroke="#94a3b8" stroke-dasharray="4,4" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+</svg>

@@ -81,8 +81,26 @@ class PhotoInterpreter:
     def interpret_numpy_image(self, img_bgr_or_rgb: np.ndarray) -> Dict[str, Any]:
         """Pipeline principal de visión por computadora y OCR."""
         if not CV2_AVAILABLE:
-            # Fallback seguro cuando OpenCV no está disponible
-            return self._fallback_interpretation()
+            missing = []
+            if not CV2_AVAILABLE:
+                missing.append('opencv-python (pip install opencv-python)')
+            if not PYTESSERACT_AVAILABLE:
+                missing.append('pytesseract (pip install pytesseract) + Tesseract OCR binary')
+            return {
+                "success": False,
+                "error": "Dependencias de visión por computadora no instaladas",
+                "missingDependencies": missing,
+                "message": "Para interpretar fotografías de diagramas UML, instale las dependencias faltantes:\n"
+                           + "\n".join(f"  - {d}" for d in missing)
+                           + "\nDespués reinicie el servidor.",
+                "diagram": None,
+                "confidence": 0.0,
+                "detectedClassCount": 0,
+                "detectedRelationshipCount": 0,
+                "detectedBoxes": [],
+                "reviewNotes": [],
+                "warnings": [f"Dependencia faltante: {d}" for d in missing],
+            }
 
         h, w = img_bgr_or_rgb.shape[:2]
         if len(img_bgr_or_rgb.shape) == 3:
@@ -453,16 +471,20 @@ class PhotoInterpreter:
 
         return {
             "success": True,
+            "isTemplate": True,
             "diagram": diag.to_dict(),
             "confidence": 0.40,
             "detectedClassCount": 2,
             "detectedRelationshipCount": 1,
             "detectedBoxes": [],
             "reviewNotes": [
-                "No fue posible segmentar con certeza los trazos de la fotografía.",
-                "Se creó una plantilla editable con 2 entidades y 1 relación para que ajustes los nombres y atributos manualmente."
+                "ATENCIÓN: No fue posible segmentar con certeza los trazos de la fotografía.",
+                "Se creó una PLANTILLA EDITABLE con 2 entidades y 1 relación de ejemplo.",
+                "Debe ajustar manualmente los nombres de clases, atributos y relaciones.",
+                "Sugerencia: Mejore la iluminación y contraste de la imagen y vuelva a intentar."
             ],
             "warnings": [
-                "Baja nitidez o contraste en la imagen cargada."
+                "Baja nitidez o contraste en la imagen cargada.",
+                "Los datos mostrados son una plantilla de ejemplo, NO fueron detectados de la imagen."
             ]
         }

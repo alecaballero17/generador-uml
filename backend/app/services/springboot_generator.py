@@ -176,6 +176,10 @@ class SpringBootGenerator:
         files["src/main/resources/application.properties"] = self._generate_application_properties()
         files["src/main/resources/application-dev.properties"] = self._generate_dev_properties()
 
+        # Database schema SQL (PostgreSQL DDL)
+        files["schema.sql"] = self._generate_sql_schema()
+        files["src/main/resources/schema.sql"] = files["schema.sql"]
+
         # Tests
         test_base = f"src/test/java/{self.package_path}"
         files[f"{test_base}/ApplicationTests.java"] = self._generate_application_test()
@@ -519,6 +523,9 @@ public class GlobalExceptionHandler {{
         imports.add("jakarta.persistence.*")
         imports.add("jakarta.validation.constraints.*")
         imports.add("lombok.*")
+        imports.add("com.fasterxml.jackson.annotation.JsonManagedReference")
+        imports.add("com.fasterxml.jackson.annotation.JsonBackReference")
+        imports.add("com.fasterxml.jackson.annotation.JsonIgnoreProperties")
 
         fields = []
         extra_imports = set()
@@ -621,11 +628,34 @@ import java.util.HashSet;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties({{"hibernateLazyInitializer", "handler"}})
 public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
 {id_field}
 {chr(10).join(fields)}
 }}
 """
+
+    def _compute_field_name_for_side(self, rel: UMLRelationship, side: str) -> str:
+        """Compute the Java field name that will be generated for a given side of a relationship.
+
+        This is the single source of truth for field naming, used both for generating
+        the field itself and for computing mappedBy values.
+        """
+        if side == "source":
+            # When processing from the source side, the field points to the target
+            target_cls = self.diagram.get_class(rel.target.class_id)
+            if not target_cls:
+                return "unknown"
+            is_collection = (rel.target.multiplicity in ("*", "0..*", "1..*") or
+                             rel.type in (RelationshipType.COMPOSITION, RelationshipType.AGGREGATION))
+            return to_camel_case(rel.target.role or (pluralize(target_cls.name) if is_collection else target_cls.name))
+        else:
+            # When processing from the target side, the field points to the source
+            source_cls = self.diagram.get_class(rel.source.class_id)
+            if not source_cls:
+                return "unknown"
+            is_collection = rel.source.multiplicity in ("*", "0..*", "1..*")
+            return to_camel_case(rel.source.role or (pluralize(source_cls.name) if is_collection else source_cls.name))
 
     def _generate_relationship_fields(self, cls: UMLClass, extra_imports: set) -> list[str]:
         """Generate JPA relationship fields for an entity."""
@@ -641,9 +671,7 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
                 if not target_cls:
                     continue
                 target_name = to_pascal_case(target_cls.name)
-                is_collection = (rel.target.multiplicity in ("*", "0..*", "1..*") or
-                                 rel.type in (RelationshipType.COMPOSITION, RelationshipType.AGGREGATION))
-                field_name = to_camel_case(rel.target.role or (pluralize(target_cls.name) if is_collection else target_cls.name))
+                field_name = self._compute_field_name_for_side(rel, "source")
 
                 field = self._build_jpa_field(
                     rel, "source", target_name, field_name,
@@ -657,8 +685,7 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
                 if not source_cls:
                     continue
                 source_name = to_pascal_case(source_cls.name)
-                is_collection = rel.source.multiplicity in ("*", "0..*", "1..*")
-                field_name = to_camel_case(rel.source.role or (pluralize(source_cls.name) if is_collection else source_cls.name))
+                field_name = self._compute_field_name_for_side(rel, "target")
 
                 field = self._build_jpa_field(
                     rel, "target", source_name, field_name,
@@ -673,44 +700,47 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
                          related_class: str, field_name: str,
                          this_mult: str, other_mult: str,
                          extra_imports: set) -> Optional[str]:
-        """Build a JPA annotated field for a relationship."""
+        """Build a JPA annotated field for a relationship.
+
+        The mappedBy value is computed by calling _compute_field_name_for_side
+        for the OPPOSITE side, ensuring it always matches the actual field name.
+        """
         this_many = this_mult in ("*", "0..*", "1..*")
         other_many = other_mult in ("*", "0..*", "1..*")
 
         annotations = []
 
-        # Calculate the field name used by the other side to point back to this entity
-        if side == "source":
-            other_role = rel.source.role or rel.target.role
-            source_name = self.diagram.get_class(rel.source.class_id).name if self.diagram.get_class(rel.source.class_id) else related_class
-            inverse_field_name = to_camel_case(other_role or source_name)
-        else:
-            other_role = rel.target.role or rel.source.role
-            target_name = self.diagram.get_class(rel.target.class_id).name if self.diagram.get_class(rel.target.class_id) else related_class
-            inverse_field_name = to_camel_case(other_role or target_name)
+        # mappedBy must reference the field name on the INVERSE entity that points back
+        # to this entity. We compute it using the same logic used to generate that field.
+        inverse_side = "target" if side == "source" else "source"
+        inverse_field_name = self._compute_field_name_for_side(rel, inverse_side)
 
         if rel.type == RelationshipType.COMPOSITION:
             if side == "source":
                 annotations = [
                     f'    @OneToMany(mappedBy = "{inverse_field_name}", '
-                    f'cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)'
+                    f'cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)',
+                    f'    @JsonManagedReference',
                 ]
                 return "\n".join(annotations) + f"\n    private List<{related_class}> {field_name} = new ArrayList<>();"
             else:
                 annotations.append(f'    @ManyToOne(fetch = FetchType.LAZY)')
                 annotations.append(f'    @JoinColumn(name = "{to_snake_case(related_class)}_id", nullable = false)')
+                annotations.append(f'    @JsonBackReference')
                 return "\n".join(annotations) + f"\n    private {related_class} {field_name};"
 
         elif rel.type == RelationshipType.AGGREGATION:
             if side == "source":
                 annotations = [
                     f'    @OneToMany(mappedBy = "{inverse_field_name}", '
-                    f'cascade = {{CascadeType.PERSIST, CascadeType.MERGE}}, fetch = FetchType.LAZY)'
+                    f'cascade = {{CascadeType.PERSIST, CascadeType.MERGE}}, fetch = FetchType.LAZY)',
+                    f'    @JsonManagedReference',
                 ]
                 return "\n".join(annotations) + f"\n    private List<{related_class}> {field_name} = new ArrayList<>();"
             else:
                 annotations.append(f'    @ManyToOne(fetch = FetchType.LAZY)')
                 annotations.append(f'    @JoinColumn(name = "{to_snake_case(related_class)}_id")')
+                annotations.append(f'    @JsonBackReference')
                 return "\n".join(annotations) + f"\n    private {related_class} {field_name};"
 
         else:  # ASSOCIATION
@@ -734,18 +764,22 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
                     annotations.append(f'        inverseJoinColumns = @JoinColumn(name = "{to_snake_case(related_class)}_id"))')
                     return "\n".join(annotations) + f"\n    private Set<{related_class}> {field_name} = new HashSet<>();"
                 else:
-                    annotations.append(f'    @ManyToMany(mappedBy = "{field_name}", fetch = FetchType.LAZY)')
+                    # For ManyToMany inverse, mappedBy references the field name on the SOURCE entity
+                    source_field_name = self._compute_field_name_for_side(rel, "source")
+                    annotations.append(f'    @ManyToMany(mappedBy = "{source_field_name}", fetch = FetchType.LAZY)')
                     return "\n".join(annotations) + f"\n    private Set<{related_class}> {field_name} = new HashSet<>();"
 
             elif other_many:
                 # This side is "one", other side is "many" -> OneToMany on this side
                 annotations.append(f'    @OneToMany(mappedBy = "{inverse_field_name}", fetch = FetchType.LAZY)')
+                annotations.append(f'    @JsonManagedReference')
                 return "\n".join(annotations) + f"\n    private List<{related_class}> {field_name} = new ArrayList<>();"
 
             else:
                 # This side is "many", other side is "one" -> ManyToOne on this side
                 annotations.append(f'    @ManyToOne(fetch = FetchType.LAZY)')
                 annotations.append(f'    @JoinColumn(name = "{to_snake_case(related_class)}_id")')
+                annotations.append(f'    @JsonBackReference')
                 return "\n".join(annotations) + f"\n    private {related_class} {field_name};"
 
         return None
@@ -931,10 +965,20 @@ public class {class_name}Service {{
 
     # ─── Controller ────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _get_endpoint_path(class_name: str) -> str:
+        """Compute the REST endpoint path for a class name.
+
+        This is the single source of truth for endpoint naming.
+        Uses snake_case pluralized converted to kebab-case.
+        Example: OrdenCompra -> orden-compras
+        """
+        return to_snake_case(pluralize(class_name)).replace("_", "-")
+
     def _generate_controller(self, cls: UMLClass) -> str:
         class_name = to_pascal_case(cls.name)
         var_name = to_camel_case(cls.name)
-        path = to_snake_case(pluralize(cls.name)).replace("_", "-")
+        path = self._get_endpoint_path(cls.name)
 
         return f"""package {self.base_package}.controller;
 
@@ -1027,6 +1071,96 @@ logging.level.org.hibernate.SQL=DEBUG
 logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
 """
 
+    def _generate_sql_schema(self) -> str:
+        """Genera el script SQL de creación de tablas PostgreSQL (DDL)."""
+        sql_types = {
+            "String": "VARCHAR(255)",
+            "Integer": "INTEGER",
+            "int": "INTEGER",
+            "Long": "BIGINT",
+            "long": "BIGINT",
+            "Float": "REAL",
+            "float": "REAL",
+            "Double": "DOUBLE PRECISION",
+            "double": "DOUBLE PRECISION",
+            "Boolean": "BOOLEAN",
+            "boolean": "BOOLEAN",
+            "Date": "DATE",
+            "LocalDate": "DATE",
+            "LocalDateTime": "TIMESTAMP",
+            "BigDecimal": "NUMERIC(12, 2)",
+            "Byte": "SMALLINT",
+            "byte": "SMALLINT",
+            "Short": "SMALLINT",
+            "short": "SMALLINT",
+            "Character": "CHAR(1)",
+            "char": "CHAR(1)",
+        }
+
+        db_name = to_snake_case(self.diagram.name).replace(" ", "_")
+        lines = [
+            f"-- ============================================================================",
+            f"-- GeneradorUML — Script DDL PostgreSQL para '{self.diagram.name}'",
+            f"-- Generado automáticamente",
+            f"-- ============================================================================",
+            f"",
+            f"-- Descomentar si se ejecuta como superusuario:",
+            f"-- CREATE DATABASE {db_name};",
+            f"-- \\c {db_name};",
+            f"",
+        ]
+
+        class_map = {c.id: c for c in self.diagram.classes}
+
+        # First generate tables
+        for cls in self.diagram.classes:
+            if cls.is_interface:
+                continue
+            table_name = to_snake_case(cls.name)
+            lines.append(f"-- Tabla: {table_name}")
+            lines.append(f"CREATE TABLE IF NOT EXISTS {table_name} (")
+            col_defs = ["    id BIGSERIAL PRIMARY KEY"]
+
+            for attr in cls.attributes:
+                if attr.name.lower() == "id":
+                    continue
+                col_name = to_snake_case(attr.name)
+                col_type = sql_types.get(attr.type, "VARCHAR(255)")
+                col_defs.append(f"    {col_name} {col_type}")
+
+            # Foreign keys from relationships where this class is target (child/dependent)
+            for rel in self.diagram.relationships:
+                if rel.target.class_id == cls.id and rel.type in (
+                    RelationshipType.COMPOSITION,
+                    RelationshipType.ASSOCIATION,
+                    RelationshipType.AGGREGATION,
+                ):
+                    src_cls = class_map.get(rel.source.class_id)
+                    if src_cls:
+                        fk_col = f"{to_snake_case(src_cls.name)}_id"
+                        on_delete = "CASCADE" if rel.type == RelationshipType.COMPOSITION else "SET NULL"
+                        col_defs.append(f"    {fk_col} BIGINT REFERENCES {to_snake_case(src_cls.name)}(id) ON DELETE {on_delete}")
+
+            lines.append(",\n".join(col_defs))
+            lines.append(");")
+            lines.append("")
+
+        # Create indexes for foreign keys
+        lines.append("-- Índices de optimización para Claves Foráneas")
+        for rel in self.diagram.relationships:
+            if rel.type in (RelationshipType.COMPOSITION, RelationshipType.ASSOCIATION, RelationshipType.AGGREGATION):
+                src_cls = class_map.get(rel.source.class_id)
+                tgt_cls = class_map.get(rel.target.class_id)
+                if src_cls and tgt_cls and not tgt_cls.is_interface:
+                    fk_col = f"{to_snake_case(src_cls.name)}_id"
+                    tgt_table = to_snake_case(tgt_cls.name)
+                    idx_name = f"idx_{tgt_table}_{fk_col}"
+                    lines.append(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {tgt_table}({fk_col});")
+
+        lines.append("")
+        return "\n".join(lines)
+
+
     # ─── Tests ─────────────────────────────────────────────────────────────
 
     def _generate_application_test(self) -> str:
@@ -1049,7 +1183,7 @@ class ApplicationTests {{
     def _generate_controller_test(self, cls: UMLClass) -> str:
         class_name = to_pascal_case(cls.name)
         var_name = to_camel_case(cls.name)
-        path = to_snake_case(pluralize(cls.name)).replace("_", "-")
+        path = self._get_endpoint_path(cls.name)
 
         return f"""package {self.base_package}.controller;
 

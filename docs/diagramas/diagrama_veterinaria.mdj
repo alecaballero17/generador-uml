@@ -1,0 +1,626 @@
+{
+  "_type": "Project",
+  "_id": "proj_veterinaria-example-001",
+  "name": "Sistema Veterinaria",
+  "ownedElements": [
+    {
+      "_type": "UMLModel",
+      "_id": "model_veterinaria-example-001",
+      "name": "Model",
+      "_parent": {
+        "$ref": "proj_veterinaria-example-001"
+      },
+      "ownedElements": [
+        {
+          "_type": "UMLClass",
+          "_id": "cls_cls-cliente",
+          "name": "Cliente",
+          "visibility": "public",
+          "isAbstract": false,
+          "_parent": {
+            "$ref": "model_veterinaria-example-001"
+          },
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-c1",
+              "name": "nombre",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cliente"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-c2",
+              "name": "apellido",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cliente"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-c3",
+              "name": "telefono",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cliente"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-c4",
+              "name": "email",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cliente"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-c5",
+              "name": "direccion",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cliente"
+              }
+            }
+          ],
+          "operations": [
+            {
+              "_type": "UMLOperation",
+              "_id": "op_op-c1",
+              "name": "registrar",
+              "visibility": "public",
+              "returnType": "void",
+              "isAbstract": false,
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cliente"
+              },
+              "parameters": []
+            },
+            {
+              "_type": "UMLOperation",
+              "_id": "op_op-c2",
+              "name": "actualizar",
+              "visibility": "public",
+              "returnType": "void",
+              "isAbstract": false,
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cliente"
+              },
+              "parameters": []
+            },
+            {
+              "_type": "UMLOperation",
+              "_id": "op_op-c3",
+              "name": "obtenerMascotas",
+              "visibility": "public",
+              "returnType": "List",
+              "isAbstract": false,
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cliente"
+              },
+              "parameters": []
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "cls_cls-mascota",
+          "name": "Mascota",
+          "visibility": "public",
+          "isAbstract": false,
+          "_parent": {
+            "$ref": "model_veterinaria-example-001"
+          },
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-m1",
+              "name": "nombre",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-mascota"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-m2",
+              "name": "especie",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-mascota"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-m3",
+              "name": "raza",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-mascota"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-m4",
+              "name": "fechaNacimiento",
+              "visibility": "private",
+              "type": "LocalDate",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-mascota"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-m5",
+              "name": "peso",
+              "visibility": "private",
+              "type": "Double",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-mascota"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-m6",
+              "name": "sexo",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-mascota"
+              }
+            }
+          ],
+          "operations": [
+            {
+              "_type": "UMLOperation",
+              "_id": "op_op-m1",
+              "name": "calcularEdad",
+              "visibility": "public",
+              "returnType": "Integer",
+              "isAbstract": false,
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-mascota"
+              },
+              "parameters": []
+            },
+            {
+              "_type": "UMLOperation",
+              "_id": "op_op-m2",
+              "name": "obtenerHistorial",
+              "visibility": "public",
+              "returnType": "List",
+              "isAbstract": false,
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-mascota"
+              },
+              "parameters": []
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "cls_cls-veterinario",
+          "name": "Veterinario",
+          "visibility": "public",
+          "isAbstract": false,
+          "_parent": {
+            "$ref": "model_veterinaria-example-001"
+          },
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-v1",
+              "name": "nombre",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-veterinario"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-v2",
+              "name": "apellido",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-veterinario"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-v3",
+              "name": "especialidad",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-veterinario"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-v4",
+              "name": "matricula",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-veterinario"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-v5",
+              "name": "telefono",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-veterinario"
+              }
+            }
+          ],
+          "operations": [
+            {
+              "_type": "UMLOperation",
+              "_id": "op_op-v1",
+              "name": "atenderCita",
+              "visibility": "public",
+              "returnType": "void",
+              "isAbstract": false,
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-veterinario"
+              },
+              "parameters": [
+                {
+                  "_type": "UMLParameter",
+                  "_id": "param_p1",
+                  "name": "cita",
+                  "type": "Cita",
+                  "_parent": {
+                    "$ref": "op_op-v1"
+                  }
+                }
+              ]
+            },
+            {
+              "_type": "UMLOperation",
+              "_id": "op_op-v2",
+              "name": "prescribirTratamiento",
+              "visibility": "public",
+              "returnType": "Tratamiento",
+              "isAbstract": false,
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-veterinario"
+              },
+              "parameters": []
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "cls_cls-cita",
+          "name": "Cita",
+          "visibility": "public",
+          "isAbstract": false,
+          "_parent": {
+            "$ref": "model_veterinaria-example-001"
+          },
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-ci1",
+              "name": "fecha",
+              "visibility": "private",
+              "type": "LocalDateTime",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cita"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-ci2",
+              "name": "motivo",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cita"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-ci3",
+              "name": "diagnostico",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cita"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-ci4",
+              "name": "estado",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cita"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-ci5",
+              "name": "observaciones",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cita"
+              }
+            }
+          ],
+          "operations": [
+            {
+              "_type": "UMLOperation",
+              "_id": "op_op-ci1",
+              "name": "confirmar",
+              "visibility": "public",
+              "returnType": "void",
+              "isAbstract": false,
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cita"
+              },
+              "parameters": []
+            },
+            {
+              "_type": "UMLOperation",
+              "_id": "op_op-ci2",
+              "name": "cancelar",
+              "visibility": "public",
+              "returnType": "void",
+              "isAbstract": false,
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cita"
+              },
+              "parameters": []
+            },
+            {
+              "_type": "UMLOperation",
+              "_id": "op_op-ci3",
+              "name": "completar",
+              "visibility": "public",
+              "returnType": "void",
+              "isAbstract": false,
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-cita"
+              },
+              "parameters": []
+            }
+          ]
+        },
+        {
+          "_type": "UMLClass",
+          "_id": "cls_cls-tratamiento",
+          "name": "Tratamiento",
+          "visibility": "public",
+          "isAbstract": false,
+          "_parent": {
+            "$ref": "model_veterinaria-example-001"
+          },
+          "attributes": [
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-t1",
+              "name": "descripcion",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-tratamiento"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-t2",
+              "name": "medicamento",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-tratamiento"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-t3",
+              "name": "dosis",
+              "visibility": "private",
+              "type": "String",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-tratamiento"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-t4",
+              "name": "duracionDias",
+              "visibility": "private",
+              "type": "Integer",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-tratamiento"
+              }
+            },
+            {
+              "_type": "UMLAttribute",
+              "_id": "attr_attr-t5",
+              "name": "costo",
+              "visibility": "private",
+              "type": "BigDecimal",
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-tratamiento"
+              }
+            }
+          ],
+          "operations": [
+            {
+              "_type": "UMLOperation",
+              "_id": "op_op-t1",
+              "name": "calcularCostoTotal",
+              "visibility": "public",
+              "returnType": "BigDecimal",
+              "isAbstract": false,
+              "isStatic": false,
+              "_parent": {
+                "$ref": "cls_cls-tratamiento"
+              },
+              "parameters": []
+            }
+          ]
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "rel_rel-1",
+          "name": "tiene",
+          "_parent": {
+            "$ref": "model_veterinaria-example-001"
+          },
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "reference": {
+              "$ref": "cls_cls-cliente"
+            },
+            "name": "dueño",
+            "multiplicity": "1",
+            "aggregation": "composite"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "reference": {
+              "$ref": "cls_cls-mascota"
+            },
+            "name": "mascotas",
+            "multiplicity": "1..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "rel_rel-2",
+          "name": "asiste",
+          "_parent": {
+            "$ref": "model_veterinaria-example-001"
+          },
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "reference": {
+              "$ref": "cls_cls-mascota"
+            },
+            "name": "",
+            "multiplicity": "1",
+            "aggregation": "none"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "reference": {
+              "$ref": "cls_cls-cita"
+            },
+            "name": "citas",
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "rel_rel-3",
+          "name": "atiende",
+          "_parent": {
+            "$ref": "model_veterinaria-example-001"
+          },
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "reference": {
+              "$ref": "cls_cls-veterinario"
+            },
+            "name": "",
+            "multiplicity": "1",
+            "aggregation": "none"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "reference": {
+              "$ref": "cls_cls-cita"
+            },
+            "name": "citas",
+            "multiplicity": "0..*"
+          }
+        },
+        {
+          "_type": "UMLAssociation",
+          "_id": "rel_rel-4",
+          "name": "incluye",
+          "_parent": {
+            "$ref": "model_veterinaria-example-001"
+          },
+          "end1": {
+            "_type": "UMLAssociationEnd",
+            "reference": {
+              "$ref": "cls_cls-cita"
+            },
+            "name": "",
+            "multiplicity": "1",
+            "aggregation": "none"
+          },
+          "end2": {
+            "_type": "UMLAssociationEnd",
+            "reference": {
+              "$ref": "cls_cls-tratamiento"
+            },
+            "name": "tratamientos",
+            "multiplicity": "0..*"
+          }
+        }
+      ]
+    }
+  ]
+}

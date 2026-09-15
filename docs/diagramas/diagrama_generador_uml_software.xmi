@@ -1,0 +1,477 @@
+<?xml version='1.0' encoding='utf-8'?>
+<xmi:XMI xmlns:xmi="http://www.omg.org/spec/XMI/20131001" xmlns:uml="http://www.omg.org/spec/UML/20131001" xmi:version="2.1">
+  <xmi:Documentation exporter="GeneradorUML" exporterVersion="1.0" />
+  <uml:Model xmi:type="uml:Model" xmi:id="model_7bf6fcb6-c8bd-4d98-a196-dc918391de4b" name="Arquitectura Software GeneradorUML">
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-diagram" name="UMLDiagram" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_50c9c966-04ca-41d3-804f-dd28a1e1bb62" name="id" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_60ef5558-1beb-49f4-91f3-a8a07ca6a474" name="name" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_f0e4af23-70f6-439a-829d-e9b8b86102b5" name="description" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_0508b738-107f-4c05-808f-467ce7378cbe" name="version" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_a102b570-72d7-4236-9a51-d4313a22a33b" name="umlVersion" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_54f60ecb-cb41-47a2-8ae3-09616e2c4b3a" name="findClass" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLClass" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_800c2e8e-7bbf-429b-951a-9725f687709e" name="classId" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_b3341324-7852-4a3d-a9ef-7d20a546a1e6" name="addClass" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_53be1abe-dc87-4266-bb1c-3c4b5ec79f6b" name="cls" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLClass" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_989a2ff8-e641-4851-a035-76c839814f23" name="addRelationship" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_f7129b5d-cb24-4b0b-a53b-41c555370378" name="rel" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLRelationship" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_433a9c75-2cf0-4835-a0ab-2d55a4bcd849" name="toDict" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_0a7d36ad-8635-4ac0-803a-17e65f974f0c" name="fromDict" visibility="public" isStatic="true">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLDiagram" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_5ab1b3cd-32e1-4784-b8c3-ecd44fc82969" name="data" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-class" name="UMLClass" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_ab1f9bcb-3fd6-4160-91da-fd87dde93a52" name="id" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_44b39411-813c-4fac-849e-4d8305a40f42" name="name" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_9f40e922-1ba9-403e-870c-a6840af9c31e" name="visibility" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Visibility" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_d730c709-8451-46a3-87b4-636b1b91bec1" name="isAbstract" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Boolean" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_6fbf26a3-3e4c-41df-ad8f-ca4412e346d4" name="isInterface" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Boolean" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_5f30a81f-9ecc-4501-bef7-300a80de0a5d" name="addAttribute" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_3c29493b-5ca7-4ed9-ace8-0f3eb8b90a81" name="attr" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLAttribute" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_6e5a8a81-13a9-4dd9-9335-091aba1976c2" name="addOperation" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_393ffc0e-9412-43ec-9430-6e75b44ee0da" name="op" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLOperation" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_64c6d232-f76f-4e7f-b269-a49df5475e8a" name="toDict" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-attribute" name="UMLAttribute" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_c93626e5-9f2f-4302-9229-baad652a0b9e" name="id" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_59f4953a-5e04-43ef-a756-ed08ce208f39" name="name" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_2b913222-cebc-4ceb-8073-7cd775c80304" name="type" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_cbb3d312-5382-425b-9644-ca3c3b4f3171" name="visibility" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Visibility" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_9685a08e-0f66-40e8-9e52-a42c21579cd6" name="defaultValue" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_7ff3658c-e81f-4a3e-8cff-c679f40b5da6" name="isStatic" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Boolean" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_e6c5a30e-d297-4f31-b1a1-be15a3bc06e2" name="toDict" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-operation" name="UMLOperation" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_cc277b0b-179c-4b2d-9758-ba0954266621" name="id" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_3e8be83c-b43b-46cb-82a6-fb5911ef602b" name="name" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_ff8f5075-6c11-4c2a-8fe9-a7e24c397875" name="returnType" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_dc8d6853-c296-4274-98ae-831f528cccf5" name="visibility" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Visibility" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_256ad792-d90e-405a-8cfa-657a305d1ef2" name="isAbstract" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Boolean" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_189fe9a1-3064-422b-8811-5166abdd5659" name="isStatic" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Boolean" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_102b099e-fee8-4ecc-b6f1-3cfdb526cdc1" name="toDict" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-parameter" name="UMLParameter" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_91da1cee-1efe-4b4e-8a1f-8bb963c49d5d" name="id" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_53ad3431-a0eb-4b69-be06-8a53e566abc5" name="name" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_b68fa703-0682-4131-abc0-c43bafb75462" name="type" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_2380ceba-2725-403a-83af-2584b3de4dbd" name="defaultValue" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_3c6f5ece-f83a-4e6b-b8e2-ee6bcca55619" name="toDict" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-relationship" name="UMLRelationship" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_a06c8879-653a-4a3e-a432-6b7eb7230d5f" name="id" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_8b623058-d06e-4d03-baee-898454cd6102" name="type" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#RelationshipType" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_6680c7f5-1aa0-4462-9a68-c06dd9c3fe1a" name="name" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_eb9f9542-b1dc-44fd-9b33-be295f9f10a8" name="toDict" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-relationship-end" name="RelationshipEnd" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_31ea7f38-997d-4b33-bdc5-44f869c0eb16" name="classId" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_482b85ed-1e19-4a7a-b846-13d0d57cce80" name="role" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_a892cdc0-15d7-42bf-a009-8c79130890b5" name="multiplicity" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_284bb61e-2d51-4129-a884-2308614b41dc" name="navigable" visibility="public">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Boolean" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_9a277f25-813e-4f62-b5b5-e5f22ea2139e" name="toDict" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-validator" name="UMLValidator" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_a0141600-e908-4a38-aaf3-8626001888ff" name="diagram" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLDiagram" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_7d40d243-24ee-4f70-8725-38e23cb39e6c" name="validate" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#ValidationResult" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_baacee5d-dfea-44a8-83ca-57a8d053069a" name="checkCircularInheritance" visibility="private" />
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_7c12c24e-6f8c-45ea-87a0-45cee1e407f6" name="checkDuplicateNames" visibility="private" />
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_ba3bd900-0e16-4558-8dbf-70de847d9394" name="checkBrokenRelationships" visibility="private" />
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-sb-gen" name="SpringBootGenerator" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_98653791-c7be-4963-9d5f-6adc80261bfc" name="diagram" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLDiagram" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_8a047a3b-215a-4e25-b12b-503a47bb47c6" name="basePackage" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_66c20a17-b568-416f-8ec9-6079704b728d" name="outputDir" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_f2e073e9-452d-463c-a426-4ba514b5d833" name="generate" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_154b2e22-3f08-4017-8ea3-120fe93969eb" name="generateToDisk" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#List" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_6708f549-9123-460c-b4f6-830c02eacf26" name="path" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_82c3642f-a95f-4bd9-b9e6-b5dce8b3b3bd" name="generateEntity" visibility="private">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_a4786357-08eb-4e42-8876-1d11369b353a" name="cls" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLClass" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_29693ee6-424a-4a1a-9f4b-7a86bad2a16b" name="generateRepository" visibility="private">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_5ae9c284-ba04-479a-9d6d-5e0eefb5102c" name="cls" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLClass" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_daac4941-8ed1-4298-acc4-f6301fcf82ad" name="generateService" visibility="private">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_1a097ffc-91cb-4263-a4df-23b9daf1e1b2" name="cls" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLClass" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_99f39864-a61e-457a-adb7-5ddf131f5e9f" name="generateController" visibility="private">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_ab95f78f-67d1-4313-bb1c-e9c0aec3b9d3" name="cls" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLClass" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_73c618ad-6277-40d9-8138-1cc3f43de960" name="generateSqlSchema" visibility="private">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-flutter-gen" name="FlutterGenerator" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_6f6a0ab4-367b-4e60-884b-5612a55d74e0" name="diagram" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLDiagram" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_ef2d7b22-dd4d-4363-acdd-292ed32a776e" name="appName" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_482a0cb6-86d6-4d0e-836c-5141b3e177c3" name="packageName" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_e47a38d1-d5a5-43ca-b927-acbf6f435663" name="generateAll" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_67f0fba8-a096-4467-9284-1c4b7e4cc917" name="generateToDisk" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#List" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_ea1806ea-86ef-48c3-8a84-64aa26aed2f5" name="path" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_1ad4478b-a8d0-424e-81bf-200160435304" name="generateModel" visibility="private">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_ff1d3e7b-10b5-4d89-9dd5-0b5494880851" name="cls" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLClass" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_7839d890-ce20-453a-abe6-ca25573616db" name="generateService" visibility="private">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_8c047631-f028-4eb6-aeef-375bb8792197" name="cls" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLClass" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_7997a5ba-b364-4289-9b42-aeaa492ab70f" name="generateListScreen" visibility="private">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_1da4184a-69a7-4c65-ae17-2c3589b69640" name="cls" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLClass" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_35f78e2f-5ec7-41ff-9fc2-27bf77951b8f" name="generateOfflineCache" visibility="private">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_e254ef09-82b0-4712-9a7f-0f3f679c35cd" name="generateAssistant" visibility="private">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-xmi-adapter" name="XMIAdapter" visibility="public">
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_685e4e06-1a0a-4182-afc8-f98deb0fe5a4" name="exportToXmi" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_90aa97a8-81b3-49a5-bbb9-5cf62f99a945" name="diagram" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLDiagram" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_40c8d3d6-d0c0-4d1d-8287-8524dde46b51" name="importFromXmi" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLDiagram" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_cf14dd9f-56d1-4fc7-85dd-ba7c82a2ce94" name="xmlContent" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-mdj-adapter" name="MDJAdapter" visibility="public">
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_bee30f38-a4cf-4143-8229-9a7b374af34a" name="exportToMdj" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_5382f9a7-0e5d-4a51-90b6-1ab56f95ceb6" name="diagram" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLDiagram" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_37dc8849-0317-4810-b62e-52967579b9f2" name="importFromMdj" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#UMLDiagram" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_f8fcff7c-c166-46c3-829a-3923ab20bf77" name="mdjJson" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-photo-interpreter" name="PhotoInterpreter" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_347941ac-c71f-49a0-8e0a-0c6798c78db6" name="tesseractAvailable" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Boolean" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_3d26117d-d252-4727-bed8-caa70fb2fac2" name="cv2Available" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Boolean" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_86796c89-f8ad-45ff-9e5b-78cfc614a78f" name="interpretImage" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_68fe933e-8d1a-45c9-96ef-7fb15edba086" name="imageBytes" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#byte[]" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_3040eff2-e259-4628-a6c8-41390aa73632" name="interpretNumpyImage" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_d9e9a7d0-a6e9-442c-8944-d48d536c74d7" name="img" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#ndarray" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-conn-mgr" name="ConnectionManager" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_87c65b68-4592-4afb-9902-5f19d4a27a5c" name="activeConnections" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_045e6cb9-0fd3-4fe6-8ea5-b5f94090aa92" name="userRoles" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_74a19bc8-0d74-44fe-bdaf-351081082871" name="connect" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_d5e53094-f5ab-40bf-9a49-0ead107b1546" name="ws" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#WebSocket" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_f1f5c5ed-d77b-4b4d-b886-39946c2b50da" name="projectId" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_d78f4017-6cdc-4763-ad4d-facb6680c0de" name="disconnect" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_1dd615d8-e16d-451f-8104-311fc54f3923" name="ws" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#WebSocket" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_fa50b205-cc51-4339-bc99-42af5b9e032e" name="projectId" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_95431f75-28a5-4fa7-9f30-98733d5818e6" name="broadcast" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_b3c3e496-dbed-46ea-a546-fe3e230286e9" name="projectId" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_c0e58b32-606f-4257-8a18-25f0f4e8d1f4" name="message" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Map" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="rel_rel-diag-cls" name="contiene">
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_s_rel-diag-cls" type="class_cls-diagram" name="diagram" aggregation="composite">
+        <lowerValue xmi:type="uml:LiteralInteger" value="1" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1" />
+      </ownedEnd>
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_t_rel-diag-cls" type="class_cls-class" name="classes">
+        <lowerValue xmi:type="uml:LiteralInteger" value="0" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="-1" />
+      </ownedEnd>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="rel_rel-diag-rel" name="contiene">
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_s_rel-diag-rel" type="class_cls-diagram" name="diagram" aggregation="composite">
+        <lowerValue xmi:type="uml:LiteralInteger" value="1" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1" />
+      </ownedEnd>
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_t_rel-diag-rel" type="class_cls-relationship" name="relationships">
+        <lowerValue xmi:type="uml:LiteralInteger" value="0" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="-1" />
+      </ownedEnd>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="rel_rel-cls-attr" name="posee">
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_s_rel-cls-attr" type="class_cls-class" name="owner" aggregation="composite">
+        <lowerValue xmi:type="uml:LiteralInteger" value="1" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1" />
+      </ownedEnd>
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_t_rel-cls-attr" type="class_cls-attribute" name="attributes">
+        <lowerValue xmi:type="uml:LiteralInteger" value="0" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="-1" />
+      </ownedEnd>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="rel_rel-cls-op" name="posee">
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_s_rel-cls-op" type="class_cls-class" name="owner" aggregation="composite">
+        <lowerValue xmi:type="uml:LiteralInteger" value="1" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1" />
+      </ownedEnd>
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_t_rel-cls-op" type="class_cls-operation" name="operations">
+        <lowerValue xmi:type="uml:LiteralInteger" value="0" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="-1" />
+      </ownedEnd>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="rel_rel-op-param" name="recibe">
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_s_rel-op-param" type="class_cls-operation" name="operation" aggregation="composite">
+        <lowerValue xmi:type="uml:LiteralInteger" value="1" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1" />
+      </ownedEnd>
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_t_rel-op-param" type="class_cls-parameter" name="parameters">
+        <lowerValue xmi:type="uml:LiteralInteger" value="0" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="-1" />
+      </ownedEnd>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="rel_rel-rel-ends" name="extremos">
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_s_rel-rel-ends" type="class_cls-relationship" name="relationship" aggregation="composite">
+        <lowerValue xmi:type="uml:LiteralInteger" value="1" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1" />
+      </ownedEnd>
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_t_rel-rel-ends" type="class_cls-relationship-end" name="ends">
+        <lowerValue xmi:type="uml:LiteralInteger" value="2" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="2" />
+      </ownedEnd>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Dependency" xmi:id="rel_rel-val-diag" client="class_cls-validator" supplier="class_cls-diagram" />
+    <packagedElement xmi:type="uml:Dependency" xmi:id="rel_rel-sb-diag" client="class_cls-sb-gen" supplier="class_cls-diagram" />
+    <packagedElement xmi:type="uml:Dependency" xmi:id="rel_rel-fl-diag" client="class_cls-flutter-gen" supplier="class_cls-diagram" />
+  </uml:Model>
+</xmi:XMI>

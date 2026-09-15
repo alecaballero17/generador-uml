@@ -237,27 +237,39 @@ GeneradorUML garantiza portabilidad total con las herramientas CASE de la indust
 2. **Compilar y ejecutar con Maven:**
    ```bash
    cd output/project_<timestamp>/springboot
+   # Si cuentas con Maven instalado:
    mvn clean compile spring-boot:run
+   # O usando el wrapper en Windows:
+   .\mvnw.cmd spring-boot:run
    ```
 3. El backend iniciará en `http://localhost:8080`:
    - Las tablas de base de datos se crearán automáticamente gracias a `spring.jpa.hibernate.ddl-auto=update`.
    - Podrás acceder a los endpoints REST de cada entidad (ej. `GET /api/clientes`, `GET /api/mascotas`, etc.).
 
-### 11.2 Ejecución de la App Móvil Flutter
+### 11.2 Ejecución de la App Móvil / Web Flutter
 
-1. **Instalar dependencias Dart:**
+1. **Generar soporte de plataforma nativa (Web, Desktop, Móvil):**
+   Dado que el generador produce el código Dart limpio (`lib/` y `pubspec.yaml`), inicializa las carpetas de plataforma correspondientes:
    ```bash
    cd output/project_<timestamp>/flutter_app
+   flutter create .
+   ```
+
+2. **Instalar dependencias Dart:**
+   ```bash
    flutter pub get
    ```
 
-2. **Configurar URL del servidor:**
+3. **Configurar URL del servidor:**
    En `lib/services/api_config.dart`, la URL base apunta por defecto a:
    - `http://10.0.2.2:8080/api` para emuladores Android.
    - `http://localhost:8080/api` para Flutter Web o Desktop.
 
-3. **Lanzar la aplicación:**
+4. **Lanzar la aplicación:**
    ```bash
+   # Para probar en navegador Chrome:
+   flutter run -d chrome
+   # O en emulador/dispositivo conectado:
    flutter run
    ```
 

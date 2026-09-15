@@ -99,6 +99,23 @@ class FlutterGenerator:
     def _to_pascal_case(self, name: str) -> str:
         return ''.join(p.capitalize() for p in re.split(r'[^a-zA-Z0-9]', name) if p)
 
+    def _pluralize(self, name: str) -> str:
+        """Simple English pluralization matching Spring Boot generator."""
+        if name.endswith("s") or name.endswith("x") or name.endswith("z"):
+            return name + "es"
+        if name.endswith("y") and name[-2:] not in ("ay", "ey", "oy", "uy"):
+            return name[:-1] + "ies"
+        return name + "s"
+
+    def _get_endpoint_path(self, class_name: str) -> str:
+        """Compute the REST endpoint path matching the Spring Boot controller.
+
+        This MUST produce the same path as SpringBootGenerator._get_endpoint_path.
+        Uses snake_case of pluralized name converted to kebab-case.
+        Example: OrdenCompra -> orden-compras
+        """
+        return self._to_snake_case(self._pluralize(class_name)).replace("_", "-")
+
     def _dart_type(self, uml_type: str) -> str:
         return self.TYPE_MAP.get(uml_type, "String")
 
@@ -191,6 +208,8 @@ dependencies:
     sdk: flutter
   http: ^1.2.0
   intl: ^0.19.0
+  shared_preferences: ^2.2.0
+  speech_to_text: ^6.6.0
 
 dev_dependencies:
   flutter_test:
@@ -282,25 +301,40 @@ class ApiConfig {
 
     def _generate_offline_cache(self) -> str:
         return """import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
-/// Servicio de caché local en memoria para soporte offline.
+/// Servicio de caché local persistente con SharedPreferences para soporte offline.
+/// Los datos se guardan en disco y sobreviven al cierre de la aplicación.
 class OfflineCacheService {
   static final OfflineCacheService _instance = OfflineCacheService._internal();
   factory OfflineCacheService() => _instance;
   OfflineCacheService._internal();
 
-  final Map<String, List<Map<String, dynamic>>> _cache = {};
+  static const String _prefix = 'offline_cache_';
 
-  void saveAll(String entityName, List<Map<String, dynamic>> items) {
-    _cache[entityName] = List.from(items);
+  /// Guarda todos los registros de una entidad en caché persistente.
+  Future<void> saveAll(String entityName, List<Map<String, dynamic>> items) async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = jsonEncode(items);
+    await prefs.setString('$_prefix$entityName', jsonString);
   }
 
-  List<Map<String, dynamic>> getAll(String entityName) {
-    return _cache[entityName] ?? [];
+  /// Obtiene todos los registros cacheados de una entidad.
+  Future<List<Map<String, dynamic>>> getAll(String entityName) async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString('$_prefix$entityName');
+    if (jsonString == null || jsonString.isEmpty) return [];
+    try {
+      final List<dynamic> decoded = jsonDecode(jsonString);
+      return decoded.cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
   }
 
-  void saveOne(String entityName, Map<String, dynamic> item, {String idKey = 'id'}) {
-    final list = _cache[entityName] ?? [];
+  /// Guarda o actualiza un registro individual en la caché.
+  Future<void> saveOne(String entityName, Map<String, dynamic> item, {String idKey = 'id'}) async {
+    final list = await getAll(entityName);
     final id = item[idKey];
     final index = list.indexWhere((i) => i[idKey] == id);
     if (index >= 0) {
@@ -308,18 +342,23 @@ class OfflineCacheService {
     } else {
       list.add(item);
     }
-    _cache[entityName] = list;
+    await saveAll(entityName, list);
   }
 
-  void removeOne(String entityName, dynamic id, {String idKey = 'id'}) {
-    final list = _cache[entityName];
-    if (list != null) {
-      list.removeWhere((i) => i[idKey] == id);
+  /// Elimina un registro de la caché por ID.
+  Future<void> removeOne(String entityName, dynamic id, {String idKey = 'id'}) async {
+    final list = await getAll(entityName);
+    list.removeWhere((i) => i[idKey] == id);
+    await saveAll(entityName, list);
+  }
+
+  /// Limpia toda la caché offline.
+  Future<void> clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys().where((k) => k.startsWith(_prefix));
+    for (final key in keys) {
+      await prefs.remove(key);
     }
-  }
-
-  void clear() {
-    _cache.clear();
   }
 }
 """
@@ -710,9 +749,10 @@ class _EntityCard extends StatelessWidget {{
     def _generate_assistant(self) -> str:
         entities_names = ", ".join([f"'{c.name}'" for c in self.entities])
         return f"""import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../services/api_config.dart';
 
-/// Asistente local de comandos de voz y texto.
+/// Asistente local de comandos de voz y texto con reconocimiento de voz real.
 class AssistantScreen extends StatefulWidget {{
   const AssistantScreen({{super.key}});
 
@@ -724,12 +764,15 @@ class _AssistantScreenState extends State<AssistantScreen> {{
   final TextEditingController _commandController = TextEditingController();
   final List<_ChatMessage> _messages = [];
   bool _isListening = false;
+  bool _speechAvailable = false;
+  final stt.SpeechToText _speech = stt.SpeechToText();
 
   final List<String> _entities = [{entities_names}];
 
   @override
   void initState() {{
     super.initState();
+    _initSpeech();
     _messages.add(
       const _ChatMessage(
         text: '¡Hola! Soy tu asistente de GeneradorUML. Puedes consultar datos o darme comandos como:\\n'
@@ -740,6 +783,29 @@ class _AssistantScreenState extends State<AssistantScreen> {{
         isUser: false,
       ),
     );
+  }}
+
+  /// Inicializa el motor de reconocimiento de voz.
+  Future<void> _initSpeech() async {{
+    try {{
+      _speechAvailable = await _speech.initialize(
+        onError: (error) {{
+          debugPrint('Speech error: ${{error.errorMsg}}');
+          if (mounted) {{
+            setState(() => _isListening = false);
+          }}
+        }},
+        onStatus: (status) {{
+          if (status == 'notListening' && mounted) {{
+            setState(() => _isListening = false);
+          }}
+        }},
+      );
+    }} catch (e) {{
+      debugPrint('Speech init failed: $e');
+      _speechAvailable = false;
+    }}
+    if (mounted) setState(() {{}});
   }}
 
   void _processCommand(String text) {{
@@ -804,22 +870,51 @@ class _AssistantScreenState extends State<AssistantScreen> {{
     }});
   }}
 
-  void _simulateVoiceInput() {{
-    setState(() => _isListening = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Escuchando... Di un comando en lenguaje natural'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+  /// Inicia o detiene la escucha de voz real con speech_to_text.
+  void _toggleVoiceInput() async {{
+    if (_isListening) {{
+      await _speech.stop();
+      setState(() => _isListening = false);
+      return;
+    }}
 
-    Future.delayed(const Duration(seconds: 2), () {{
-      if (mounted) {{
-        setState(() => _isListening = false);
-        final sample = 'Listar ${{_entities.isNotEmpty ? _entities.first : "registros"}}';
-        _processCommand(sample);
-      }}
-    }});
+    if (!_speechAvailable) {{
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Reconocimiento de voz no disponible en este dispositivo.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }}
+
+    setState(() => _isListening = true);
+
+    await _speech.listen(
+      onResult: (result) {{
+        if (result.finalResult && result.recognizedWords.isNotEmpty) {{
+          _processCommand(result.recognizedWords);
+          setState(() => _isListening = false);
+        }} else if (!result.finalResult) {{
+          // Mostrar texto parcial mientras se dicta
+          setState(() {{
+            _commandController.text = result.recognizedWords;
+          }});
+        }}
+      }},
+      localeId: 'es_ES',
+      listenMode: stt.ListenMode.confirmation,
+      cancelOnError: true,
+      listenFor: const Duration(seconds: 15),
+      pauseFor: const Duration(seconds: 3),
+    );
+  }}
+
+  @override
+  void dispose() {{
+    _speech.stop();
+    _commandController.dispose();
+    super.dispose();
   }}
 
   @override
@@ -830,6 +925,24 @@ class _AssistantScreenState extends State<AssistantScreen> {{
     return Scaffold(
       appBar: AppBar(
         title: const Text('Asistente Local'),
+        actions: [
+          if (_speechAvailable)
+            const Padding(
+              padding: EdgeInsets.only(right: 12),
+              child: Chip(
+                avatar: Icon(Icons.mic, size: 16),
+                label: Text('Voz activa', style: TextStyle(fontSize: 11)),
+              ),
+            )
+          else
+            const Padding(
+              padding: EdgeInsets.only(right: 12),
+              child: Chip(
+                avatar: Icon(Icons.mic_off, size: 16),
+                label: Text('Sin voz', style: TextStyle(fontSize: 11)),
+              ),
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -850,7 +963,7 @@ class _AssistantScreenState extends State<AssistantScreen> {{
                     decoration: BoxDecoration(
                       color: msg.isUser
                           ? colorScheme.primary
-                          : colorScheme.surfaceVariant,
+                          : colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(16),
                         topRight: const Radius.circular(16),
@@ -891,15 +1004,15 @@ class _AssistantScreenState extends State<AssistantScreen> {{
                       foregroundColor: _isListening ? Colors.white : colorScheme.onPrimaryContainer,
                     ),
                     icon: Icon(_isListening ? Icons.mic : Icons.mic_none),
-                    onPressed: _simulateVoiceInput,
+                    onPressed: _toggleVoiceInput,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
                       controller: _commandController,
-                      decoration: const InputDecoration(
-                        hintText: 'Escribe o dicta un comando...',
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: InputDecoration(
+                        hintText: _isListening ? 'Escuchando...' : 'Escribe o dicta un comando...',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       ),
                       onSubmitted: _processCommand,
                     ),
@@ -942,7 +1055,7 @@ class _ChatMessage {{
         for attr in attributes:
             dtype = self._dart_type(attr.type)
             is_pk = (attr.name == pk.name)
-            is_nullable = is_pk or dtype in ("DateTime", "int", "double") or getattr(attr, 'is_optional', False)
+            is_nullable = is_pk or dtype in ("DateTime", "int", "double", "bool") or getattr(attr, 'is_optional', False)
 
             null_mark = "?" if is_nullable else ""
             fields_decl.append(f"  final {dtype}{null_mark} {attr.name};")
@@ -967,7 +1080,7 @@ class _ChatMessage {{
                 )
             elif dtype == "bool":
                 from_json_fields.append(
-                    f"      {attr.name}: json['{attr.name}'] == true || json['{attr.name}'] == 'true' || json['{attr.name}'] == 1,"
+                    f"      {attr.name}: json['{attr.name}'] == true || json['{attr.name}'] == 'true' || json['{attr.name}'] == 1 ? true : false,"
                 )
             else:
                 from_json_fields.append(
@@ -1023,7 +1136,7 @@ class {cls.name} {{
     def _generate_entity_service(self, cls: UMLClass) -> str:
         snake = self._to_snake_case(cls.name)
         pk = self._get_primary_key(cls)
-        endpoint = f"/{snake}s"
+        endpoint = f"/{self._get_endpoint_path(cls.name)}"
 
         return f"""import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -1058,14 +1171,14 @@ class {cls.name}Service {{
 
         final items = list.map((item) => {cls.name}.fromJson(item as Map<String, dynamic>)).toList();
         // Guardar en caché offline
-        _cache.saveAll('{snake}', list.cast<Map<String, dynamic>>());
+        await _cache.saveAll('{snake}', list.cast<Map<String, dynamic>>());
         return items;
       }} else {{
         throw Exception('Error del servidor: ${{response.statusCode}}');
       }}
     }} catch (e) {{
       // Fallback a caché offline si la red falla
-      final cached = _cache.getAll('{snake}');
+      final cached = await _cache.getAll('{snake}');
       if (cached.isNotEmpty) {{
         return cached.map((item) => {cls.name}.fromJson(item)).toList();
       }}
@@ -1097,7 +1210,7 @@ class {cls.name}Service {{
     if (response.statusCode == 200 || response.statusCode == 201) {{
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       final created = {cls.name}.fromJson(data);
-      _cache.saveOne('{snake}', data, idKey: '{pk.name}');
+      await _cache.saveOne('{snake}', data, idKey: '{pk.name}');
       return created;
     }} else {{
       throw Exception('Error al crear registro: ${{response.body}}');
@@ -1114,7 +1227,7 @@ class {cls.name}Service {{
     if (response.statusCode == 200) {{
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       final updated = {cls.name}.fromJson(data);
-      _cache.saveOne('{snake}', data, idKey: '{pk.name}');
+      await _cache.saveOne('{snake}', data, idKey: '{pk.name}');
       return updated;
     }} else {{
       throw Exception('Error al actualizar registro: ${{response.body}}');
@@ -1128,7 +1241,7 @@ class {cls.name}Service {{
         .timeout(ApiConfig.timeoutDuration);
 
     if (response.statusCode == 200 || response.statusCode == 204) {{
-      _cache.removeOne('{snake}', id, idKey: '{pk.name}');
+      await _cache.removeOne('{snake}', id, idKey: '{pk.name}');
       return true;
     }} else {{
       throw Exception('Error al eliminar registro');

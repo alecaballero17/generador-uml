@@ -118,20 +118,26 @@ print('Interoperabilidad XMI 2.1 y StarUML MDJ verificada al 100%')
 
 ---
 
-## 🛠️ Ejecución del Código Generado
-
 ### Backend Spring Boot:
 ```bash
 cd output/<directorio_generado>/springboot
+# Usar Maven instalado:
 mvn clean compile spring-boot:run
+# O usar el Maven Wrapper incluido en Windows:
+.\mvnw.cmd spring-boot:run
 ```
 Acceso REST: `http://localhost:8080/api/<entidad>`
 
-### App Móvil Flutter:
+### App Móvil / Web Flutter:
+El generador produce la arquitectura completa Dart/Material 3 (`lib/`, `pubspec.yaml`). Para generar los archivos de plataforma nativa (Web, Windows, Android):
 ```bash
 cd output/<directorio_generado>/flutter_app
+# 1. Crear las plataformas nativas necesarias:
+flutter create .
+# 2. Instalar dependencias:
 flutter pub get
-flutter run
+# 3. Ejecutar en Chrome (Web) o dispositivo móvil/desktop:
+flutter run -d chrome
 ```
 
 ### Colección Postman:

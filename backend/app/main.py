@@ -437,28 +437,90 @@ async def interpret_photo(file: UploadFile = File(...)):
 
 
 class ConnectionManager:
-    """Manages WebSocket connections for real-time collaboration."""
+    """Manages WebSocket connections for real-time collaboration.
+
+    Features:
+    - Role-based access: admin (full), editor (edit diagram), viewer (read-only)
+    - Typed messages: diagram_update, cursor_move, chat, join, leave
+    - Change versioning: each update increments a version counter
+    - Change log: recent changes are tracked for audit
+    """
 
     def __init__(self):
-        self.active_connections: dict[str, list[WebSocket]] = {}
+        self.active_connections: dict[str, list[dict]] = {}  # project_id -> [{ws, user, role}]
+        self.project_versions: dict[str, int] = {}  # project_id -> version counter
+        self.change_log: dict[str, list[dict]] = {}  # project_id -> [{user, action, version, timestamp}]
 
-    async def connect(self, websocket: WebSocket, project_id: str):
+    async def connect(self, websocket: WebSocket, project_id: str, user: str = "anonymous", role: str = "editor"):
         await websocket.accept()
         if project_id not in self.active_connections:
             self.active_connections[project_id] = []
-        self.active_connections[project_id].append(websocket)
+            self.project_versions[project_id] = 0
+            self.change_log[project_id] = []
+
+        conn_info = {"ws": websocket, "user": user, "role": role}
+        self.active_connections[project_id].append(conn_info)
+
+        # Notify others that a new user joined
+        join_msg = json.dumps({
+            "type": "join",
+            "user": user,
+            "role": role,
+            "activeUsers": len(self.active_connections[project_id]),
+            "version": self.project_versions[project_id],
+        })
+        await self.broadcast(join_msg, project_id, exclude=websocket)
 
     def disconnect(self, websocket: WebSocket, project_id: str):
         if project_id in self.active_connections:
-            self.active_connections[project_id].remove(websocket)
+            user = "anonymous"
+            for conn in self.active_connections[project_id]:
+                if conn["ws"] == websocket:
+                    user = conn["user"]
+                    self.active_connections[project_id].remove(conn)
+                    break
             if not self.active_connections[project_id]:
                 del self.active_connections[project_id]
+            return user
+        return "anonymous"
+
+    def get_role(self, websocket: WebSocket, project_id: str) -> str:
+        """Get the role of a connected user."""
+        if project_id in self.active_connections:
+            for conn in self.active_connections[project_id]:
+                if conn["ws"] == websocket:
+                    return conn["role"]
+        return "viewer"
+
+    def increment_version(self, project_id: str) -> int:
+        """Increment and return the new version number for a project."""
+        self.project_versions[project_id] = self.project_versions.get(project_id, 0) + 1
+        return self.project_versions[project_id]
+
+    def add_to_changelog(self, project_id: str, user: str, action: str, version: int):
+        """Add an entry to the change log (keeps last 50 entries)."""
+        if project_id not in self.change_log:
+            self.change_log[project_id] = []
+        self.change_log[project_id].append({
+            "user": user,
+            "action": action,
+            "version": version,
+            "timestamp": datetime.now().isoformat(),
+        })
+        # Keep only last 50 entries
+        self.change_log[project_id] = self.change_log[project_id][-50:]
 
     async def broadcast(self, message: str, project_id: str, exclude: WebSocket = None):
         if project_id in self.active_connections:
-            for connection in self.active_connections[project_id]:
-                if connection != exclude:
-                    await connection.send_text(message)
+            disconnected = []
+            for conn in self.active_connections[project_id]:
+                if conn["ws"] != exclude:
+                    try:
+                        await conn["ws"].send_text(message)
+                    except Exception:
+                        disconnected.append(conn)
+            for conn in disconnected:
+                self.active_connections[project_id].remove(conn)
 
 
 manager = ConnectionManager()
@@ -466,14 +528,55 @@ manager = ConnectionManager()
 
 @app.websocket("/ws/{project_id}")
 async def websocket_endpoint(websocket: WebSocket, project_id: str):
-    await manager.connect(websocket, project_id)
+    # Extract user and role from query params (e.g., ?user=Juan&role=editor)
+    user = websocket.query_params.get("user", "anonymous")
+    role = websocket.query_params.get("role", "editor")
+    if role not in ("admin", "editor", "viewer"):
+        role = "viewer"
+
+    await manager.connect(websocket, project_id, user=user, role=role)
     try:
         while True:
-            data = await websocket.receive_text()
-            # Broadcast changes to all other clients
-            await manager.broadcast(data, project_id, exclude=websocket)
+            raw_data = await websocket.receive_text()
+            try:
+                msg = json.loads(raw_data)
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({"type": "error", "message": "JSON inválido"}))
+                continue
+
+            msg_type = msg.get("type", "unknown")
+            user_role = manager.get_role(websocket, project_id)
+
+            # Viewers cannot send diagram updates
+            if user_role == "viewer" and msg_type == "diagram_update":
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "No tiene permisos de edición (rol: viewer)"
+                }))
+                continue
+
+            # For diagram updates, increment version
+            if msg_type == "diagram_update":
+                new_version = manager.increment_version(project_id)
+                msg["version"] = new_version
+                msg["user"] = user
+                manager.add_to_changelog(project_id, user, "diagram_update", new_version)
+                await manager.broadcast(json.dumps(msg), project_id, exclude=websocket)
+            elif msg_type in ("cursor_move", "chat"):
+                msg["user"] = user
+                await manager.broadcast(json.dumps(msg), project_id, exclude=websocket)
+            else:
+                # Forward unknown types as-is
+                await manager.broadcast(raw_data, project_id, exclude=websocket)
+
     except WebSocketDisconnect:
-        manager.disconnect(websocket, project_id)
+        disconnected_user = manager.disconnect(websocket, project_id)
+        leave_msg = json.dumps({
+            "type": "leave",
+            "user": disconnected_user,
+            "activeUsers": len(manager.active_connections.get(project_id, [])),
+        })
+        await manager.broadcast(leave_msg, project_id)
 
 
 # ─── Serve Frontend ───────────────────────────────────────────────────────

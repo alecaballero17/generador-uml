@@ -1,0 +1,169 @@
+<?xml version='1.0' encoding='utf-8'?>
+<xmi:XMI xmlns:xmi="http://www.omg.org/spec/XMI/20131001" xmlns:uml="http://www.omg.org/spec/UML/20131001" xmi:version="2.1">
+  <xmi:Documentation exporter="GeneradorUML" exporterVersion="1.0" />
+  <uml:Model xmi:type="uml:Model" xmi:id="model_veterinaria-example-001" name="Sistema Veterinaria">
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-cliente" name="Cliente" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-c1" name="nombre" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-c2" name="apellido" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-c3" name="telefono" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-c4" name="email" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-c5" name="direccion" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_op-c1" name="registrar" visibility="public" />
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_op-c2" name="actualizar" visibility="public" />
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_op-c3" name="obtenerMascotas" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#List" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-mascota" name="Mascota" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-m1" name="nombre" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-m2" name="especie" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-m3" name="raza" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-m4" name="fechaNacimiento" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#LocalDate" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-m5" name="peso" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Double" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-m6" name="sexo" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_op-m1" name="calcularEdad" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Integer" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_op-m2" name="obtenerHistorial" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#List" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-veterinario" name="Veterinario" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-v1" name="nombre" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-v2" name="apellido" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-v3" name="especialidad" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-v4" name="matricula" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-v5" name="telefono" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_op-v1" name="atenderCita" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="param_p1" name="cita" direction="in">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Cita" />
+        </ownedParameter>
+      </ownedOperation>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_op-v2" name="prescribirTratamiento" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Tratamiento" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-cita" name="Cita" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-ci1" name="fecha" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#LocalDateTime" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-ci2" name="motivo" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-ci3" name="diagnostico" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-ci4" name="estado" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-ci5" name="observaciones" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_op-ci1" name="confirmar" visibility="public" />
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_op-ci2" name="cancelar" visibility="public" />
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_op-ci3" name="completar" visibility="public" />
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="class_cls-tratamiento" name="Tratamiento" visibility="public">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-t1" name="descripcion" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-t2" name="medicamento" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-t3" name="dosis" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#String" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-t4" name="duracionDias" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#Integer" />
+      </ownedAttribute>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="attr_attr-t5" name="costo" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#BigDecimal" />
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="op_op-t1" name="calcularCostoTotal" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" name="return" direction="return">
+          <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi#BigDecimal" />
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="rel_rel-1" name="tiene">
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_s_rel-1" type="class_cls-cliente" name="dueño" aggregation="composite">
+        <lowerValue xmi:type="uml:LiteralInteger" value="1" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1" />
+      </ownedEnd>
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_t_rel-1" type="class_cls-mascota" name="mascotas">
+        <lowerValue xmi:type="uml:LiteralInteger" value="1" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="-1" />
+      </ownedEnd>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="rel_rel-2" name="asiste">
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_s_rel-2" type="class_cls-mascota">
+        <lowerValue xmi:type="uml:LiteralInteger" value="1" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1" />
+      </ownedEnd>
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_t_rel-2" type="class_cls-cita" name="citas">
+        <lowerValue xmi:type="uml:LiteralInteger" value="0" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="-1" />
+      </ownedEnd>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="rel_rel-3" name="atiende">
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_s_rel-3" type="class_cls-veterinario">
+        <lowerValue xmi:type="uml:LiteralInteger" value="1" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1" />
+      </ownedEnd>
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_t_rel-3" type="class_cls-cita" name="citas">
+        <lowerValue xmi:type="uml:LiteralInteger" value="0" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="-1" />
+      </ownedEnd>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="rel_rel-4" name="incluye">
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_s_rel-4" type="class_cls-cita">
+        <lowerValue xmi:type="uml:LiteralInteger" value="1" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="1" />
+      </ownedEnd>
+      <ownedEnd xmi:type="uml:Property" xmi:id="end_t_rel-4" type="class_cls-tratamiento" name="tratamientos">
+        <lowerValue xmi:type="uml:LiteralInteger" value="0" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" value="-1" />
+      </ownedEnd>
+    </packagedElement>
+  </uml:Model>
+</xmi:XMI>
