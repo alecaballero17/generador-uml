@@ -80,7 +80,7 @@ class PhotoInterpreter:
 
     def interpret_numpy_image(self, img_bgr_or_rgb: np.ndarray) -> Dict[str, Any]:
         """Pipeline principal de visión por computadora y OCR."""
-        if not CV2_AVAILABLE:
+        if not CV2_AVAILABLE or not PYTESSERACT_AVAILABLE:
             missing = []
             if not CV2_AVAILABLE:
                 missing.append('opencv-python (pip install opencv-python)')
@@ -129,13 +129,16 @@ class PhotoInterpreter:
             box_roi = gray[box.y:box.y + box.h, box.x:box.x + box.w]
             text = self._ocr_roi(box_roi)
             box.raw_text = text
+            if not text.strip():
+                self.warnings.append("Caja sin texto OCR; requiere revision manual.")
+                continue
 
             uml_class = self._parse_class_text(text, box)
             box.parsed_class = uml_class
             diagram.classes.append(uml_class)
 
         # 4. Detectar conexiones / líneas entre cajas
-        lines = self._detect_relationships(binary, detected_boxes)
+        lines = self._detect_relationships(binary, [b for b in detected_boxes if b.parsed_class])
         for line in lines:
             if line.source_box_id and line.target_box_id:
                 rel = UMLRelationship(
@@ -383,7 +386,7 @@ class PhotoInterpreter:
 
         if hough_lines is None:
             # Inferencia de proximidad cuando las líneas tienen pequeños quiebres
-            return self._infer_closest_connections(boxes)
+            return []
 
         for line_seg in hough_lines:
             coords = line_seg.flatten()
@@ -410,7 +413,7 @@ class PhotoInterpreter:
                     ))
 
         if not lines:
-            lines = self._infer_closest_connections(boxes)
+            lines = []
 
         return lines
 
@@ -452,44 +455,8 @@ class PhotoInterpreter:
         clean = re.sub(r'[^A-Za-z0-9_]', '', raw)
         return clean.strip()
 
-    def _fallback_interpretation(self) -> Dict[str, Any]:
-        """Genera una estructura de partida cuando la imagen no es interpretable automáticamente."""
-        diag = UMLDiagram(name="Diagrama desde Fotografía")
-        c1 = UMLClass(
-            name="EntidadA",
-            attributes=[UMLAttribute(name="id", type="Long", visibility=Visibility.PRIVATE), UMLAttribute(name="nombre", type="String", visibility=Visibility.PUBLIC)],
-            position=Position(x=100.0, y=100.0)
-        )
-        c2 = UMLClass(
-            name="EntidadB",
-            attributes=[UMLAttribute(name="id", type="Long", visibility=Visibility.PRIVATE), UMLAttribute(name="descripcion", type="String", visibility=Visibility.PUBLIC)],
-            position=Position(x=450.0, y=100.0)
-        )
-        diag.classes.extend([c1, c2])
-        diag.relationships.append(
-            UMLRelationship(
-                type=RelationshipType.ASSOCIATION,
-                source=RelationshipEnd(class_id=c1.id, multiplicity=Multiplicity.ONE),
-                target=RelationshipEnd(class_id=c2.id, multiplicity=Multiplicity.MANY),
-            )
-        )
-
-        return {
-            "success": True,
-            "isTemplate": True,
-            "diagram": diag.to_dict(),
-            "confidence": 0.40,
-            "detectedClassCount": 2,
-            "detectedRelationshipCount": 1,
-            "detectedBoxes": [],
-            "reviewNotes": [
-                "ATENCIÓN: No fue posible segmentar con certeza los trazos de la fotografía.",
-                "Se creó una PLANTILLA EDITABLE con 2 entidades y 1 relación de ejemplo.",
-                "Debe ajustar manualmente los nombres de clases, atributos y relaciones.",
-                "Sugerencia: Mejore la iluminación y contraste de la imagen y vuelva a intentar."
-            ],
-            "warnings": [
-                "Baja nitidez o contraste en la imagen cargada.",
-                "Los datos mostrados son una plantilla de ejemplo, NO fueron detectados de la imagen."
-            ]
-        }
+    def _fallback_interpretation(self):
+        return {"success": False, "isTemplate": False, "diagram": None,
+                "confidence": None, "detectedClassCount": 0, "detectedRelationshipCount": 0,
+                "detectedBoxes": [], "reviewNotes": [], "error": "No se reconocio un diagrama",
+                "warnings": self.warnings + ["No se han inventado entidades. Revise la foto y la instalacion OCR."]}

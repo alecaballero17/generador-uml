@@ -1,0 +1,15 @@
+{
+  "repository": "onnx-community/whisper-tiny",
+  "revision": "ff4177021cc41f7db950912b73ea4fdf7d01d8e7",
+  "license": "Consultar model card",
+  "files": [
+    "config.json",
+    "generation_config.json",
+    "preprocessor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "special_tokens_map.json",
+    "onnx/encoder_model_quantized.onnx",
+    "onnx/decoder_model_merged_quantized.onnx"
+  ]
+}

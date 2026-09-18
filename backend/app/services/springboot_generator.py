@@ -31,7 +31,7 @@ UML_TO_JAVA_TYPE = {
     "Double": "Double",
     "double": "double",
     "Boolean": "Boolean",
-    "boolean": "boolean",
+    "boolean": "Boolean",
     "Date": "LocalDate",
     "LocalDate": "LocalDate",
     "LocalDateTime": "LocalDateTime",
@@ -67,7 +67,7 @@ def to_pascal_case(name: str) -> str:
     if name[0].isupper() and "_" not in name:
         return name
     # snake_case to PascalCase
-    return "".join(word.capitalize() for word in name.split("_"))
+    return "".join(word[:1].upper() + word[1:] for word in name.split("_") if word)
 
 
 def to_camel_case(name: str) -> str:
@@ -162,7 +162,8 @@ class SpringBootGenerator:
         # Generate per-entity files
         for cls in self.diagram.classes:
             if cls.is_interface:
-                continue  # Interfaces don't become entities
+                files[f"{src_base}/entity/{to_pascal_case(cls.name)}.java"] = self._generate_interface(cls)
+                continue
 
             class_name = to_pascal_case(cls.name)
 
@@ -175,6 +176,7 @@ class SpringBootGenerator:
         # Application properties
         files["src/main/resources/application.properties"] = self._generate_application_properties()
         files["src/main/resources/application-dev.properties"] = self._generate_dev_properties()
+        files["src/test/resources/application-test.properties"] = "spring.datasource.url=jdbc:h2:mem:uml;DB_CLOSE_DELAY=-1\nspring.datasource.driver-class-name=org.h2.Driver\nspring.datasource.username=sa\nspring.datasource.password=\nspring.jpa.database-platform=org.hibernate.dialect.H2Dialect\nspring.jpa.hibernate.ddl-auto=create-drop\n"
 
         # Database schema SQL (PostgreSQL DDL)
         files["schema.sql"] = self._generate_sql_schema()
@@ -188,6 +190,15 @@ class SpringBootGenerator:
                 class_name = to_pascal_case(cls.name)
                 files[f"{test_base}/controller/{class_name}ControllerTest.java"] = self._generate_controller_test(cls)
 
+        from .rest_contract import generate_rest
+        files.update(generate_rest(self))
+        # Old mock-controller tests used entity bodies; REST now exposes typed DTOs.
+        files = {p: c for p, c in files.items() if not p.endswith("ControllerTest.java")}
+        for cls in self.diagram.classes:
+            if cls.is_abstract:
+                name = to_pascal_case(cls.name)
+                files.pop(f"{src_base}/controller/{name}Controller.java", None)
+                files.pop(f"{src_base}/service/{name}Service.java", None)
         return files
 
     def generate_to_disk(self, base_path: str = None) -> list[str]:
@@ -232,6 +243,7 @@ class SpringBootGenerator:
 
     <properties>
         <java.version>17</java.version>
+        <lombok.version>1.18.36</lombok.version>
     </properties>
 
     <dependencies>
@@ -515,6 +527,13 @@ public class GlobalExceptionHandler {{
 
     # ─── Entity ────────────────────────────────────────────────────────────
 
+    def _generate_interface(self, cls):
+        methods = []
+        for op in cls.operations:
+            params = ", ".join(get_java_type(p.type, self.diagram) + " " + p.name for p in op.parameters)
+            methods.append(f'    default {get_java_type(op.return_type, self.diagram)} {op.name}({params}) {{ throw new UnsupportedOperationException("Operacion UML sin regla de negocio implementada"); }}')
+        return f"package {self.base_package}.entity;\nimport java.util.*;\nimport java.time.*;\nimport java.math.*;\npublic interface {to_pascal_case(cls.name)} {{\n" + "\n".join(methods) + "\n}\n"
+
     def _generate_entity(self, cls: UMLClass) -> str:
         class_name = to_pascal_case(cls.name)
         table_name = to_snake_case(cls.name)
@@ -547,7 +566,7 @@ public class GlobalExceptionHandler {{
                 annotations.append("    @GeneratedValue(strategy = GenerationType.IDENTITY)")
             else:
                 col_parts = [f'name = "{to_snake_case(attr.name)}"']
-                if attr.visibility == Visibility.PUBLIC or "NotNull" in str(attr.constraints):
+                if "NotNull" in str(attr.constraints) or attr.multiplicity == "1":
                     col_parts.append("nullable = false")
                 annotations.append(f"    @Column({', '.join(col_parts)})")
 
@@ -607,12 +626,15 @@ public class GlobalExceptionHandler {{
 
         # Add @Id field if not present
         id_field = ""
-        if not has_id:
+        if not has_id and not parent_classes:
             id_field = """
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 """
+
+        if not parent_classes:
+            fields.append("    @Version\n    private Long version;")
 
         return f"""package {self.base_package}.entity;
 
@@ -696,6 +718,11 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
 
         return fields
 
+    @staticmethod
+    def _reference_name(rel):
+        import hashlib
+        return "rel_" + hashlib.sha256(rel.id.encode()).hexdigest()[:20]
+
     def _build_jpa_field(self, rel: UMLRelationship, side: str,
                          related_class: str, field_name: str,
                          this_mult: str, other_mult: str,
@@ -720,13 +747,13 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
                 annotations = [
                     f'    @OneToMany(mappedBy = "{inverse_field_name}", '
                     f'cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)',
-                    f'    @JsonManagedReference',
+                    f'    @JsonManagedReference("{self._reference_name(rel)}")',
                 ]
                 return "\n".join(annotations) + f"\n    private List<{related_class}> {field_name} = new ArrayList<>();"
             else:
                 annotations.append(f'    @ManyToOne(fetch = FetchType.LAZY)')
                 annotations.append(f'    @JoinColumn(name = "{to_snake_case(related_class)}_id", nullable = false)')
-                annotations.append(f'    @JsonBackReference')
+                annotations.append(f'    @JsonBackReference("{self._reference_name(rel)}")')
                 return "\n".join(annotations) + f"\n    private {related_class} {field_name};"
 
         elif rel.type == RelationshipType.AGGREGATION:
@@ -734,13 +761,13 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
                 annotations = [
                     f'    @OneToMany(mappedBy = "{inverse_field_name}", '
                     f'cascade = {{CascadeType.PERSIST, CascadeType.MERGE}}, fetch = FetchType.LAZY)',
-                    f'    @JsonManagedReference',
+                    f'    @JsonManagedReference("{self._reference_name(rel)}")',
                 ]
                 return "\n".join(annotations) + f"\n    private List<{related_class}> {field_name} = new ArrayList<>();"
             else:
                 annotations.append(f'    @ManyToOne(fetch = FetchType.LAZY)')
                 annotations.append(f'    @JoinColumn(name = "{to_snake_case(related_class)}_id")')
-                annotations.append(f'    @JsonBackReference')
+                annotations.append(f'    @JsonBackReference("{self._reference_name(rel)}")')
                 return "\n".join(annotations) + f"\n    private {related_class} {field_name};"
 
         else:  # ASSOCIATION
@@ -772,14 +799,14 @@ public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
             elif other_many:
                 # This side is "one", other side is "many" -> OneToMany on this side
                 annotations.append(f'    @OneToMany(mappedBy = "{inverse_field_name}", fetch = FetchType.LAZY)')
-                annotations.append(f'    @JsonManagedReference')
+                annotations.append(f'    @JsonManagedReference("{self._reference_name(rel)}")')
                 return "\n".join(annotations) + f"\n    private List<{related_class}> {field_name} = new ArrayList<>();"
 
             else:
                 # This side is "many", other side is "one" -> ManyToOne on this side
                 annotations.append(f'    @ManyToOne(fetch = FetchType.LAZY)')
                 annotations.append(f'    @JoinColumn(name = "{to_snake_case(related_class)}_id")')
-                annotations.append(f'    @JsonBackReference')
+                annotations.append(f'    @JsonBackReference("{self._reference_name(rel)}")')
                 return "\n".join(annotations) + f"\n    private {related_class} {field_name};"
 
         return None
@@ -1044,9 +1071,9 @@ public class {class_name}Controller {{
 spring.application.name={self.diagram.name}
 
 # PostgreSQL
-spring.datasource.url=jdbc:postgresql://localhost:5432/{db_name}
-spring.datasource.username=postgres
-spring.datasource.password=postgres
+spring.datasource.url=${{DB_URL:jdbc:postgresql://localhost:5432/{db_name}}}
+spring.datasource.username=${{DB_USER:postgres}}
+spring.datasource.password=${{DB_PASSWORD:}}
 spring.datasource.driver-class-name=org.postgresql.Driver
 
 # JPA / Hibernate

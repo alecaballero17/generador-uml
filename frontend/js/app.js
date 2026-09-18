@@ -156,6 +156,8 @@ class UMLRelNode {
 // SVG Namespace and Utilities
 // ═══════════════════════════════════════════════════════════════════════════
 
+function escapeHTML(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function svgEl(tag, attrs = {}) {
@@ -193,7 +195,7 @@ const state = {
     undoStack: [],
     redoStack: [],
     classCounter: 1,
-    projectId: 'proyecto_principal',
+    projectId: new URLSearchParams(location.search).get('project') || localStorage.getItem('last_collaboration_project') || crypto.randomUUID(),
     pendingPhotoFile: null,
     detectedDiagram: null,
     ws: null,
@@ -554,6 +556,19 @@ function renderAll() {
 
     // Update properties panel
     updatePropertiesPanel();
+
+    // Debounced sync for real-time collaboration on local changes
+    if (!state.isRemoteUpdate && typeof debouncedBroadcast === 'function') {
+        debouncedBroadcast(300);
+    }
+}
+
+let _broadcastTimer = null;
+function debouncedBroadcast(delay = 300) {
+    clearTimeout(_broadcastTimer);
+    _broadcastTimer = setTimeout(() => {
+        if (typeof broadcastChange === 'function') broadcastChange();
+    }, delay);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -606,15 +621,15 @@ function renderAttributesList(cls) {
         const row = document.createElement('div');
         row.className = 'item-row';
         row.innerHTML = `
-            <select class="item-visibility" data-attr-id="${attr.id}" data-field="visibility">
+            <select class="item-visibility" data-attr-id="${escapeHTML(attr.id)}" data-field="visibility">
                 <option value="+" ${attr.visibility === '+' ? 'selected' : ''}>+</option>
                 <option value="-" ${attr.visibility === '-' ? 'selected' : ''}>-</option>
                 <option value="#" ${attr.visibility === '#' ? 'selected' : ''}>#</option>
                 <option value="~" ${attr.visibility === '~' ? 'selected' : ''}>~</option>
             </select>
-            <input class="item-name" value="${attr.name}" data-attr-id="${attr.id}" data-field="name" placeholder="nombre" spellcheck="false">
-            <input class="item-type" value="${attr.type}" data-attr-id="${attr.id}" data-field="type" placeholder="tipo" spellcheck="false">
-            <button class="item-delete" data-attr-id="${attr.id}" title="Eliminar atributo">×</button>
+            <input class="item-name" value="${escapeHTML(attr.name)}" data-attr-id="${escapeHTML(attr.id)}" data-field="name" placeholder="nombre" spellcheck="false">
+            <input class="item-type" value="${escapeHTML(attr.type)}" data-attr-id="${escapeHTML(attr.id)}" data-field="type" placeholder="tipo" spellcheck="false">
+            <button class="item-delete" data-attr-id="${escapeHTML(attr.id)}" title="Eliminar atributo">×</button>
         `;
         list.appendChild(row);
     }
@@ -653,15 +668,15 @@ function renderOperationsList(cls) {
         const row = document.createElement('div');
         row.className = 'item-row';
         row.innerHTML = `
-            <select class="item-visibility" data-op-id="${op.id}" data-field="visibility">
+            <select class="item-visibility" data-op-id="${escapeHTML(op.id)}" data-field="visibility">
                 <option value="+" ${op.visibility === '+' ? 'selected' : ''}>+</option>
                 <option value="-" ${op.visibility === '-' ? 'selected' : ''}>-</option>
                 <option value="#" ${op.visibility === '#' ? 'selected' : ''}>#</option>
                 <option value="~" ${op.visibility === '~' ? 'selected' : ''}>~</option>
             </select>
-            <input class="item-name" value="${op.name}" data-op-id="${op.id}" data-field="name" placeholder="nombre" spellcheck="false">
-            <input class="item-type" value="${op.returnType || 'void'}" data-op-id="${op.id}" data-field="returnType" placeholder="retorno" spellcheck="false">
-            <button class="item-delete" data-op-id="${op.id}" title="Eliminar operación">×</button>
+            <input class="item-name" value="${escapeHTML(op.name)}" data-op-id="${escapeHTML(op.id)}" data-field="name" placeholder="nombre" spellcheck="false">
+            <input class="item-type" value="${escapeHTML(op.returnType || 'void')}" data-op-id="${escapeHTML(op.id)}" data-field="returnType" placeholder="retorno" spellcheck="false">
+            <button class="item-delete" data-op-id="${escapeHTML(op.id)}" title="Eliminar operación">×</button>
         `;
         list.appendChild(row);
     }
@@ -847,6 +862,7 @@ canvasContainer.addEventListener('mouseup', (e) => {
     if (state.isDragging) {
         state.isDragging = false;
         state.dragTarget = null;
+        if (typeof debouncedBroadcast === 'function') debouncedBroadcast(50);
     }
 
     if (state.isDrawingRel) {
@@ -1149,9 +1165,9 @@ function showValidation(result) {
     let html = '';
     const icons = { error: '✕', warning: '⚠', info: 'ℹ' };
     for (const issue of result.issues) {
-        html += `<div class="val-issue ${issue.severity}">
+        html += `<div class="val-issue ${escapeHTML(issue.severity)}">
             <span class="val-icon">${icons[issue.severity]}</span>
-            <span>${issue.message}</span>
+            <span>${escapeHTML(issue.message)}</span>
         </div>`;
     }
     body.innerHTML = html;
@@ -1206,30 +1222,13 @@ $('#btnStartGeneration').addEventListener('click', async () => {
     fillEl.style.width = '0%';
 
     function log(msg, type = 'info') {
-        logEl.innerHTML += `<div class="log-${type}">→ ${msg}</div>`;
+        const line=document.createElement("div"); line.className=`log-${type}`; line.textContent=`→ ${msg}`; logEl.append(line);
         logEl.scrollTop = logEl.scrollHeight;
     }
 
     try {
-        log('Validando diagrama...');
-        fillEl.style.width = '10%';
-        await new Promise(r => setTimeout(r, 300));
-
-        log('Generando entidades JPA...');
-        fillEl.style.width = '30%';
-        await new Promise(r => setTimeout(r, 400));
-
-        log('Generando repositorios y servicios...');
-        fillEl.style.width = '50%';
-        await new Promise(r => setTimeout(r, 300));
-
-        log('Generando controladores REST...');
-        fillEl.style.width = '65%';
-        await new Promise(r => setTimeout(r, 300));
-
-        log('Generando colección Postman...');
-        fillEl.style.width = '80%';
-
+        log('Generando archivos en el servidor…');
+        fillEl.style.width = '0%';
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1243,7 +1242,7 @@ $('#btnStartGeneration').addEventListener('click', async () => {
 
         const result = await response.json();
 
-        if (response.ok) {
+        if (response.ok && !result.errors?.length) {
             fillEl.style.width = '100%';
             log(`Generación completada: ${result.files?.length || 0} archivos creados`, 'success');
 
@@ -1258,7 +1257,7 @@ $('#btnStartGeneration').addEventListener('click', async () => {
             resultsEl.innerHTML = `
                 <strong>✓ Aplicación generada exitosamente</strong><br>
                 <span style="font-size: 12px; color: var(--text-secondary);">
-                    Directorio: ${result.projectDir}<br>
+                    Directorio: ${escapeHTML(result.projectDir)}<br>
                     Clases: ${result.classCount} | Relaciones: ${result.relationshipCount}
                 </span>
             `;
@@ -1266,7 +1265,7 @@ $('#btnStartGeneration').addEventListener('click', async () => {
         } else {
             fillEl.style.width = '100%';
             fillEl.style.background = 'var(--error)';
-            log(`Error: ${result.error || 'Error desconocido'}`, 'error');
+            log(`Error: ${result.errors?.join('; ') || result.error || result.detail || 'Error desconocido'}`, 'error');
             if (result.validation) {
                 result.validation.issues.forEach(i => log(`${i.severity}: ${i.message}`, i.severity));
             }
@@ -1787,13 +1786,13 @@ $('#btnProcessPhoto').addEventListener('click', async () => {
         const notes = $('#photoReviewNotes');
         let notesHtml = '<div><strong>Detalles de la detección:</strong></div>';
         if (result.detectedBoxes && result.detectedBoxes.length > 0) {
-            notesHtml += '<ul>' + result.detectedBoxes.map(b => `<li>Caja detectada: <em>${b.name}</em> (${b.w}x${b.h}px)</li>`).join('') + '</ul>';
+            notesHtml += '<ul>' + result.detectedBoxes.map(b => `<li>Caja detectada: <em>${escapeHTML(b.name)}</em> (${b.w}x${b.h}px)</li>`).join('') + '</ul>';
         }
         if (result.warnings && result.warnings.length > 0) {
-            notesHtml += '<div style="color: var(--warning); margin-top: 4px;">⚠️ Advertencias:</div><ul>' + result.warnings.map(w => `<li>${w}</li>`).join('') + '</ul>';
+            notesHtml += '<div style="color: var(--warning); margin-top: 4px;">⚠️ Advertencias:</div><ul>' + result.warnings.map(w => `<li>${escapeHTML(w)}</li>`).join('') + '</ul>';
         }
         if (result.reviewNotes && result.reviewNotes.length > 0) {
-            notesHtml += '<ul>' + result.reviewNotes.map(n => `<li>${n}</li>`).join('') + '</ul>';
+            notesHtml += '<ul>' + result.reviewNotes.map(n => `<li>${escapeHTML(n)}</li>`).join('') + '</ul>';
         }
         notes.innerHTML = notesHtml;
 
@@ -1845,30 +1844,9 @@ function saveCurrentProjectToStorage() {
 }
 
 async function saveProject() {
-    saveCurrentProjectToStorage();
-
-    const data = {
-        projectId: state.projectId,
-        name: state.model.name,
-        diagram: state.model.toJSON(),
-    };
-
-    try {
-        const res = await fetch('/api/projects/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        });
-        if (res.ok) {
-            const saved = await res.json();
-            if (saved.projectId) state.projectId = saved.projectId;
-            showToast('Proyecto guardado en servidor y caché local', 'success');
-        } else {
-            showToast('Guardado en caché local (servidor no disponible)', 'warning');
-        }
-    } catch {
-        showToast('Guardado en caché local (modo offline)', 'info');
-    }
+    broadcastChange();
+    persistCollaboration();
+    showToast(state.ws?.readyState === WebSocket.OPEN ? 'Guardado local; sincronización automática activa' : 'Guardado en este dispositivo. Se sincronizará al reconectar.', 'info');
 }
 
 $('#btnSave').addEventListener('click', saveProject);
@@ -1884,75 +1862,6 @@ window.addEventListener('keydown', (e) => {
 // Real-Time Collaboration (WebSocket)
 // ═══════════════════════════════════════════════════════════════════════════
 
-let wsBroadcastTimeout = null;
-function broadcastChange() {
-    if (state.isRemoteUpdate) return;
-    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
-
-    clearTimeout(wsBroadcastTimeout);
-    wsBroadcastTimeout = setTimeout(() => {
-        try {
-            state.ws.send(JSON.stringify({
-                type: 'diagram_update',
-                projectId: state.projectId,
-                diagram: state.model.toJSON(),
-            }));
-        } catch (e) {
-            console.warn('Error enviando actualización WebSocket', e);
-        }
-    }, 250);
-}
-
-function initWebSocket() {
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${location.host}/ws/${state.projectId}`;
-    const badge = $('#collabStatus');
-
-    try {
-        state.ws = new WebSocket(wsUrl);
-
-        state.ws.onopen = () => {
-            if (badge) {
-                badge.innerHTML = '<span class="status-dot online"></span> Conectado';
-                badge.title = 'Sincronización en tiempo real activa';
-            }
-        };
-
-        state.ws.onmessage = (event) => {
-            try {
-                const msg = JSON.parse(event.data);
-                if (msg.type === 'diagram_update' && msg.diagram) {
-                    state.isRemoteUpdate = true;
-                    state.model = UMLModel.fromJSON(msg.diagram);
-                    renderAll();
-                    state.isRemoteUpdate = false;
-                    showToast('Diagrama sincronizado desde otro colaborador', 'info');
-                }
-            } catch (err) {
-                console.warn('Mensaje WS no interpretable:', err);
-            }
-        };
-
-        state.ws.onclose = () => {
-            if (badge) {
-                badge.innerHTML = '<span class="status-dot offline"></span> Modo Local';
-                badge.title = 'Trabajando sin conexión en tiempo real';
-            }
-            setTimeout(initWebSocket, 5000);
-        };
-
-        state.ws.onerror = () => {
-            if (badge) {
-                badge.innerHTML = '<span class="status-dot offline"></span> Modo Local';
-            }
-        };
-    } catch {
-        if (badge) {
-            badge.innerHTML = '<span class="status-dot offline"></span> Modo Local';
-        }
-    }
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // Toast Notifications
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1962,7 +1871,7 @@ function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
-    toast.innerHTML = `<span style="font-size: 16px;">${icons[type]}</span> ${message}`;
+    toast.textContent = `${icons[type] || ''} ${message}`;
     container.appendChild(toast);
     setTimeout(() => toast.remove(), 4000);
 }
@@ -1990,10 +1899,11 @@ $$('.tab-btn').forEach(btn => {
 function init() {
     // Check if previous project exists in localStorage
     try {
-        const cached = localStorage.getItem('generador_uml_current');
+        const shared = savedCollaboration();
+        const cached = shared ? JSON.stringify(shared.diagram) : (!new URLSearchParams(location.search).has('project') ? localStorage.getItem('generador_uml_current') : null);
         if (cached) {
             const data = JSON.parse(cached);
-            if (data && data.classes && data.classes.length > 0) {
+            if (data && data.classes) {
                 state.model = UMLModel.fromJSON(data);
                 state.classCounter = state.model.classes.length + 1;
                 $('#projectName').value = state.model.name;
@@ -2003,6 +1913,9 @@ function init() {
 
     renderAll();
     initWebSocket();
+    // Debounced broadcast on real changes + gentle 3-second fallback heartbeat
+    setInterval(broadcastChange, 3000);
+    $('#btnShare').addEventListener('click', showShareDialog);
 
     // Autosave every 30 seconds
     setInterval(saveCurrentProjectToStorage, 30000);

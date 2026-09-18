@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GeneradorUML — Editor de Diagramas de Clases</title>
     <meta name="description" content="Herramienta CASE para crear, editar e interpretar diagramas de clases UML 2.5+ y generar aplicaciones completas.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/index.css">
+    <link rel="stylesheet" href="css/index.css?v=20260918d">
+    <link rel="stylesheet" href="css/mobile.css?v=20260918d">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#0f0f14">
 </head>
 <body>
     <!-- ─── Top Bar ──────────────────────────────────────────────────── -->
@@ -45,6 +45,8 @@
             </div>
         </div>
         <div class="topbar-right">
+            <button class="btn-secondary" id="mobileMode">Vista móvil</button>
+            <button class="btn-primary" id="btnShare">Compartir</button>
             <span id="collabStatus" class="collab-badge" title="Estado de sincronización en tiempo real">
                 <span class="status-dot online"></span> Conectado
             </span>
@@ -73,6 +75,25 @@
     </header>
 
     <!-- ─── Main Layout ─────────────────────────────────────────────── -->
+    <section id="mobileWorkspace" aria-label="Graficador móvil">
+        <div class="mobile-intro"><span class="mobile-eyebrow">TU DIAGRAMA, DONDE ESTÉS</span><h1>De una idea a una clase.</h1><p>Dicta, escribe o toma una foto. Revisa el resultado y sigue construyendo el mismo diagrama con tu equipo.</p></div>
+        <div class="mobile-actions"><button id="mobileShare" class="btn-secondary">Compartir</button><button id="mobileImport" class="btn-secondary">Importar</button><button id="mobileExport" class="btn-secondary">Exportar</button></div>
+        <section class="mobile-card"><h2>¿Qué quieres crear?</h2><p>Prueba: «Crea una clase Usuario con atributos ID, nombre de tipo texto y edad de tipo entero».</p>
+            <textarea id="mobileCommand" aria-label="Comando para el diagrama" placeholder="Escribe o dicta una clase y sus atributos…"></textarea>
+            <div class="mobile-actions"><button id="mobileMic" class="btn-primary">Dictar diagrama</button><button id="reviewMobileCommand" class="btn-secondary">Revisar comando</button></div>
+            <p id="mobileReview" role="status">El comando se revisa antes de cambiar tu diagrama.</p><button id="applyMobileCommand" class="btn-primary" disabled>Aplicar al diagrama</button>
+        </section>
+        <section class="mobile-card"><h2>Una foto también es un inicio</h2><p>El OCR lee el texto aquí. Revisa nombres y atributos; la lectura de escritura a mano puede necesitar correcciones.</p>
+            <label class="btn-secondary" for="mobilePhoto">Tomar o elegir foto</label><input id="mobilePhoto" type="file" accept="image/*" capture="environment" class="hidden-input">
+            <div id="mobilePhotoReview" hidden><p>Una clase por bloque: nombre en la primera línea, luego atributo: tipo. Separa las clases con una línea vacía.</p><textarea id="mobilePhotoText" aria-label="Texto de la foto para revisar"></textarea><button id="applyPhotoText" class="btn-primary">Importar texto revisado</button></div>
+        </section>
+        <section class="mobile-card"><h2>Trabajar sin conexión</h2><p>Prepara los modelos una vez mientras tengas conexión. La voz y el OCR se procesan en tu dispositivo; los cambios del diagrama se guardan localmente y se sincronizan cuando regresa el servidor.</p>
+            <button id="prepareOffline" class="btn-secondary">Preparar voz y foto sin conexión</button><p id="mobileAIStatus" role="status">La generación de Spring Boot y Flutter requiere el servidor. La edición del diagrama puede ser local.</p>
+            <details class="mobile-help"><summary>Guía y prueba de audio</summary><p>Di «Crea clase Usuario con atributos id y nombre». Para ampliar: «Agrega atributo edad de tipo entero a clase Usuario». Puedes revisar y corregir la transcripción antes de aplicarla.</p><p>El reconocimiento usa un modelo local; la interpretación admite estos comandos concretos. En móvil, el micrófono requiere HTTPS. El acceso localhost sirve para probar en esta computadora.</p><label for="mobileAudio">Probar un audio grabado</label><input id="mobileAudio" type="file" accept="audio/*"></details>
+        </section>
+        <section class="mobile-card"><h2>Clases del diagrama</h2><div id="mobileClasses"></div></section>
+    </section>
+
     <main id="mainLayout">
         <!-- ─── Left Sidebar: Toolbox ─────────────────────────────── -->
         <aside id="sidebar" class="sidebar">
@@ -556,6 +577,10 @@
     <!-- Hidden file inputs -->
     <input type="file" id="importFileInput" accept=".json,.mdj,.xmi,.xml" class="hidden-input">
 
-    <script src="js/app.js"></script>
+    <script src="js/collaboration.js?v=20260918d"></script>
+    <script src="js/uml-commands.js?v=20260918d"></script>
+    <script src="js/app.js?v=20260918d"></script>
+    <script src="js/local-ai.js?v=20260918d"></script>
+    <script src="js/mobile.js?v=20260918d"></script>
 </body>
 </html>

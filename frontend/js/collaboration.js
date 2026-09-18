@@ -1,0 +1,171 @@
+/* Shared projects: persistent snapshots, capability links, field-level merge. */
+const collaborationClientId = sessionStorage.getItem('uml_client_id') || crypto.randomUUID();
+sessionStorage.setItem('uml_client_id', collaborationClientId);
+const collaborationStorageKey = () => `collaboration_${(typeof state !== 'undefined' ? state.projectId : '')}_${collaborationClientId}`;
+function savedCollaboration() {
+    if (typeof state === 'undefined' || !state.projectId) return null;
+    const latest=localStorage.getItem(`collaboration_latest_${state.projectId}`);
+    return JSON.parse(localStorage.getItem(collaborationStorageKey()) || (latest && localStorage.getItem(latest)) || localStorage.getItem(`collaboration_${state.projectId}`) || 'null');
+}
+const collaborationState = { base: null, revision: 0, token: null, role: 'admin', inflight: null, conflict: null, ready: false, reconnect: null };
+const copyDiagram = value => JSON.parse(JSON.stringify(value));
+const stableDiagram = x => Array.isArray(x) ? x.map(stableDiagram) : x && typeof x === 'object' ? Object.fromEntries(Object.keys(x).sort().map(k=>[k,stableDiagram(x[k])])) : x;
+const sameDiagram = (a,b) => JSON.stringify(stableDiagram(a)) === JSON.stringify(stableDiagram(b));
+function mergeDiagrams(base, local, remote, preferLocal = false, path = 'diagrama') {
+    if (sameDiagram(local, base)) return remote;
+    if (sameDiagram(remote, base) || sameDiagram(local, remote)) return local;
+    const objects = [base,local,remote].every(x => x && typeof x === 'object' && !Array.isArray(x));
+    if (objects) {
+        const result = {};
+        for (const key of new Set([...Object.keys(base),...Object.keys(local),...Object.keys(remote)])) {
+            const merged = mergeDiagrams(base[key], local[key], remote[key], preferLocal, `${path}.${key}`);
+            if (merged !== undefined) result[key] = merged;
+        }
+        return result;
+    }
+    if ([base,local,remote].every(Array.isArray) && [base,local,remote].every(a => a.every(x => x && typeof x.id === 'string'))) {
+        const maps = [base,local,remote].map(a => Object.fromEntries(a.map(x => [x.id,x])));
+        const joined = mergeDiagrams(...maps, preferLocal, path);
+        return [...new Set([...remote,...local].map(x=>x.id))].filter(id=>joined[id]).map(id=>joined[id]);
+    }
+    if (preferLocal) return local;
+    throw new Error(path);
+}
+function syncBadge(text) { $('#collabStatus').textContent = text; }
+function persistCollaboration() {
+    try {
+        localStorage.setItem(collaborationStorageKey(), JSON.stringify({base: collaborationState.base, revision: collaborationState.revision, token: collaborationState.token, diagram: state.model.toJSON()}));
+        if (!sameDiagram(state.model.toJSON(),collaborationState.base) || !localStorage.getItem(`collaboration_latest_${state.projectId}`)) localStorage.setItem(`collaboration_latest_${state.projectId}`,collaborationStorageKey());
+        localStorage.setItem('last_collaboration_project',state.projectId);
+        saveCurrentProjectToStorage();
+    } catch (_) { syncBadge('No se pudo guardar localmente'); }
+}
+function applySharedDiagram(diagram) {
+    state.isRemoteUpdate = true;
+    state.model = UMLModel.fromJSON(diagram);
+    $('#projectName').value = state.model.name;
+    renderAll();
+    state.isRemoteUpdate = false;
+}
+function handleSharedSnapshot(msg, acknowledged = false) {
+    const current = state.model.toJSON();
+    const base = acknowledged ? collaborationState.inflight : collaborationState.base;
+    if (acknowledged) collaborationState.inflight = null;
+    else if (collaborationState.inflight) return;
+    if (msg.revision < collaborationState.revision) return;
+    try {
+        const joined = base ? mergeDiagrams(base,current,msg.diagram) : msg.diagram;
+        collaborationState.base = copyDiagram(msg.diagram);
+        collaborationState.revision = msg.revision;
+        if (!sameDiagram(current,joined)) applySharedDiagram(joined);
+        persistCollaboration();
+        broadcastChange();
+    } catch (error) { showCollaborationConflict(msg,base,current,error.message); }
+}
+function showCollaborationConflict(msg,base,local,path) {
+    collaborationState.inflight = null;
+    collaborationState.conflict = {msg,base,local};
+    try { localStorage.setItem(`conflict_${state.projectId}_${Date.now()}`,JSON.stringify(local)); } catch (_) {}
+    syncBadge('Conflicto: revisa tus cambios');
+    let dialog = document.getElementById('collaborationConflict');
+    if (dialog) dialog.remove();
+    dialog = document.createElement('dialog'); dialog.id='collaborationConflict';
+    const title = document.createElement('h2'); title.textContent='Cambios simultáneos';
+    const text = document.createElement('p'); text.textContent=`Se editó el mismo dato (${path}). Tu copia se conservó localmente. Elige cómo resolverlo.`;
+    dialog.append(title,text);
+    for (const [label,value] of [['Tu diagrama',local],['Diagrama compartido',msg.diagram]]) {
+        const caption=document.createElement('h3'); caption.textContent=label;
+        const area=document.createElement('textarea'); area.readOnly=true; area.value=JSON.stringify(value,null,2); area.style.cssText='width:100%;height:140px'; dialog.append(caption,area);
+    }
+    for (const [label,keep] of [['Usar versión compartida',false],['Conservar mis cambios en conflicto',true]]) {
+        const button=document.createElement('button'); button.textContent=label; button.className='btn-primary';
+        button.onclick=()=>{
+            const choice=collaborationState.conflict;
+            const merged=keep ? mergeDiagrams(choice.base,choice.local,choice.msg.diagram,true) : choice.msg.diagram;
+            collaborationState.base=copyDiagram(choice.msg.diagram); collaborationState.revision=choice.msg.revision;
+            collaborationState.conflict=null; applySharedDiagram(merged); dialog.close(); dialog.remove(); persistCollaboration(); broadcastChange();
+        }; dialog.append(button);
+    }
+    dialog.addEventListener('cancel',event=>event.preventDefault());
+    document.body.append(dialog); dialog.showModal();
+}
+function broadcastChange() {
+    if (state.isRemoteUpdate || !collaborationState.ready || collaborationState.conflict) return;
+    persistCollaboration();
+    if (collaborationState.role==='viewer' || collaborationState.inflight || !collaborationState.base || state.ws?.readyState!==WebSocket.OPEN) return;
+    const diagram=copyDiagram(state.model.toJSON());
+    if (sameDiagram(diagram,collaborationState.base)) return;
+    collaborationState.inflight=diagram;
+    state.ws.send(JSON.stringify({type:'update',revision:collaborationState.revision,diagram}));
+    syncBadge('Guardando cambios…');
+}
+async function initWebSocket() {
+    clearTimeout(collaborationState.reconnect);
+    if (state.ws && [WebSocket.OPEN,WebSocket.CONNECTING].includes(state.ws.readyState)) return;
+    try {
+        if (!collaborationState.token) {
+            const params=new URLSearchParams(location.hash.slice(1));
+            const saved=savedCollaboration();
+            collaborationState.token=params.get('access')||saved?.token;
+            if (saved) { collaborationState.base=saved.base; collaborationState.revision=saved.revision; }
+            if (!collaborationState.token) {
+                if (new URLSearchParams(location.search).has('project')) throw new Error('Falta el enlace de acceso');
+                const result=await fetch('/api/collaboration/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diagram:state.model.toJSON()})});
+                if (!result.ok) throw new Error('Servidor no disponible');
+                const data=await result.json();
+                state.projectId=data.projectId; collaborationState.token=data.token;
+                collaborationState.base=data.diagram; collaborationState.revision=data.revision;
+            }
+            const url=new URL(location.href); url.searchParams.set('project',state.projectId); url.hash=`access=${collaborationState.token}`;
+            history.replaceState(null,'',url);
+        }
+        collaborationState.ready=true;
+        const protocol=location.protocol==='https:'?'wss:':'ws:';
+        state.ws=new WebSocket(`${protocol}//${location.host}/ws/collaboration/${encodeURIComponent(state.projectId)}`);
+        state.ws.onopen=()=>state.ws.send(JSON.stringify({token:collaborationState.token}));
+        state.ws.onmessage=event=>{
+            const msg=JSON.parse(event.data);
+            if (msg.role) collaborationState.role=msg.role;
+            collaborationState.ready=true;
+            if (msg.type==='snapshot' || msg.type==='ack') {
+                handleSharedSnapshot(msg,msg.type==='ack');
+                if(!collaborationState.conflict)syncBadge(collaborationState.role==='viewer'?'Solo lectura':'Sincronizado');
+            } else if (msg.type==='presence') syncBadge(`${msg.count} participantes · ${collaborationState.role==='viewer'?'lectura':'edición'}`);
+            else if (msg.type==='conflict') showCollaborationConflict(msg,collaborationState.base,state.model.toJSON(),msg.message);
+            else if (msg.type==='error') { collaborationState.inflight=null; showToast(msg.message,'error'); }
+            if (collaborationState.role==='viewer') {
+                document.querySelectorAll('#sidebar button,#propertiesPanel input,#propertiesPanel button,#propertiesPanel select,#projectName,#btnImport,#btnPhoto,#btnVoice').forEach(el=>el.disabled=true);
+                canvasContainer.style.pointerEvents='none';
+            }
+            persistCollaboration();
+        };
+        state.ws.onclose=event=>{
+            collaborationState.inflight=null;
+            syncBadge(event.code===4403?'Enlace sin permiso':'Sin conexión · guardado local');
+            if (event.code!==4403) collaborationState.reconnect=setTimeout(initWebSocket,3000);
+        };
+        state.ws.onerror=()=>syncBadge('Sin conexión · guardado local');
+    } catch(error) {
+        collaborationState.ready=true;
+        syncBadge(error.message==='Falta el enlace de acceso'?error.message:'Sin conexión · guardado local');
+        collaborationState.reconnect=setTimeout(initWebSocket,3000);
+    }
+}
+async function showShareDialog() {
+    if (!collaborationState.token || state.ws?.readyState!==WebSocket.OPEN) { showToast('Conecta con el servidor para compartir','warning'); return; }
+    if (collaborationState.role!=='admin') { showToast('Pide un enlace al administrador del proyecto','info'); return; }
+    const dialog=document.createElement('dialog');
+    const heading=document.createElement('h2'); heading.textContent='Compartir diagrama';
+    const note=document.createElement('p'); note.textContent='Quien tenga este enlace podrá acceder con el permiso elegido. Un enlace localhost solo funciona en esta computadora; para otras personas hace falta el servidor accesible en su red.';
+    const select=document.createElement('select');
+    for (const [value,label] of [['editor','Puede editar'],['viewer','Solo lectura']]) { const option=document.createElement('option'); option.value=value; option.textContent=label; select.append(option); }
+    const output=document.createElement('input'); output.readOnly=true; output.style.width='100%'; output.setAttribute('aria-label','Enlace para compartir');
+    const make=document.createElement('button'); make.textContent='Crear enlace'; make.className='btn-primary';
+    make.onclick=async()=>{
+        const response=await fetch(`/api/collaboration/${state.projectId}/invite`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${collaborationState.token}`},body:JSON.stringify({role:select.value})});
+        if (!response.ok) { showToast('No se pudo crear el enlace','error'); return; }
+        const invite=await response.json(); const url=new URL(location.href); url.hash=`access=${invite.token}`; output.value=url.href; output.select();
+    };
+    const close=document.createElement('button'); close.textContent='Cerrar'; close.onclick=()=>{dialog.close();dialog.remove();};
+    dialog.append(heading,note,select,make,output,close); document.body.append(dialog); dialog.showModal();
+}

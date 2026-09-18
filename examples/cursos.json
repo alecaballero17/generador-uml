@@ -1,0 +1,55 @@
+{
+  "name": "CursosDemo",
+  "classes": [
+    {
+      "id": "instructor",
+      "name": "Instructor",
+      "attributes": [
+        {
+          "name": "nombre",
+          "type": "String",
+          "constraints": [
+            "required"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "curso",
+      "name": "CursoProgramado",
+      "attributes": [
+        {
+          "name": "titulo",
+          "type": "String",
+          "constraints": [
+            "required"
+          ]
+        },
+        {
+          "name": "fechaInicio",
+          "type": "LocalDate"
+        },
+        {
+          "name": "activo",
+          "type": "Boolean"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "id": "imparte",
+      "type": "association",
+      "source": {
+        "classId": "instructor",
+        "role": "instructor",
+        "multiplicity": "1"
+      },
+      "target": {
+        "classId": "curso",
+        "role": "cursos",
+        "multiplicity": "0..*"
+      }
+    }
+  ]
+}

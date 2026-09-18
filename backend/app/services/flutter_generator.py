@@ -117,11 +117,11 @@ class FlutterGenerator:
         return self._to_snake_case(self._pluralize(class_name)).replace("_", "-")
 
     def _dart_type(self, uml_type: str) -> str:
-        return self.TYPE_MAP.get(uml_type, "String")
+        return "List<int>" if uml_type == "RelationIds" else self.TYPE_MAP.get(uml_type, "String")
 
     def _get_primary_key(self, cls: UMLClass) -> UMLAttribute:
         for attr in cls.attributes:
-            if attr.name.lower() in ("id", f"{cls.name.lower()}id", f"{cls.name.lower()}_id", "codigo"):
+            if attr.name == "id":
                 return attr
         # Si no hay explícito, usar id
         return UMLAttribute(name="id", type="Long", visibility=Visibility.PUBLIC)
@@ -144,6 +144,20 @@ class FlutterGenerator:
                 return attr
         return None
 
+    def _rest_schema(self, cls):
+        import copy
+        from .rest_contract import relation_specs, attributes
+        from .springboot_generator import SpringBootGenerator
+        result = copy.deepcopy(cls)
+        result.attributes = copy.deepcopy(attributes(self.diagram, cls))
+        result.attributes.append(UMLAttribute(name="version", type="Long", is_derived=True))
+        for spec in relation_specs(SpringBootGenerator(self.diagram), cls):
+            if spec["owner"]:
+                attr = UMLAttribute(name=spec["key"], type="RelationIds" if spec["many"] else "Long")
+                attr.constraints = ["required"] if spec["required"] else []
+                result.attributes.append(attr)
+        return result
+
     def generate_all(self) -> Dict[str, str]:
         """Genera todos los archivos del proyecto Flutter y retorna un dict {ruta_relativa: contenido}."""
         files: Dict[str, str] = {}
@@ -163,7 +177,8 @@ class FlutterGenerator:
         files["lib/screens/assistant_screen.dart"] = self._generate_assistant()
 
         # 4. Por cada entidad: Model, Service, ListScreen, DetailScreen, FormScreen
-        for cls in self.entities:
+        for original in self.entities:
+            cls = self._rest_schema(original)
             snake = self._to_snake_case(cls.name)
             files[f"lib/models/{snake}.dart"] = self._generate_model(cls)
             files[f"lib/services/{snake}_service.dart"] = self._generate_entity_service(cls)
@@ -178,6 +193,27 @@ class FlutterGenerator:
 
     def generate_to_disk(self, output_dir: str) -> List[str]:
         """Escribe todos los archivos generados a disco y devuelve la lista de rutas absolutas."""
+        import subprocess, shutil
+        from pathlib import Path
+        flutter = shutil.which("flutter") or shutil.which("flutter.bat")
+        if not flutter:
+            raise RuntimeError("Flutter SDK no disponible: se necesita para entregar proyectos web/Android/iOS completos")
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        scaffold = subprocess.run([flutter, "create", "--no-pub", "--platforms=web,android,ios", "--org", self.package_name, "--project-name", self.app_name, str(Path(output_dir).resolve())], capture_output=True, text=True, errors="replace", timeout=180)
+        if scaffold.returncode:
+            raise RuntimeError("No se pudo preparar Flutter: " + scaffold.stderr[-1000:])
+        manifest = Path(output_dir) / "android/app/src/main/AndroidManifest.xml"
+        if manifest.exists():
+            text = manifest.read_text(encoding="utf-8")
+            if 'android.permission.RECORD_AUDIO' not in text:
+                text = text.replace("    <application", '    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <application android:usesCleartextTraffic="true"')
+            manifest.write_text(text, encoding="utf-8")
+        import plistlib
+        info = Path(output_dir) / "ios/Runner/Info.plist"
+        if info.exists():
+            data = plistlib.loads(info.read_bytes())
+            data.update(NSMicrophoneUsageDescription="Dictar comandos para gestionar registros", NSSpeechRecognitionUsageDescription="Transcribir comandos de voz", NSAppTransportSecurity={"NSAllowsLocalNetworking": True})
+            info.write_bytes(plistlib.dumps(data))
         generated_files = self.generate_all()
         written_paths: List[str] = []
 
@@ -667,7 +703,7 @@ class _DashboardScreenState extends State<DashboardScreen> {{
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Asistente de Voz e IA',
+                              'Asistente de consultas y voz',
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: colorScheme.onPrimaryContainer,
@@ -675,7 +711,7 @@ class _DashboardScreenState extends State<DashboardScreen> {{
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Consulta datos o dicta comandos en lenguaje natural',
+                              'Consulta registros o abre formularios con texto y voz',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: colorScheme.onPrimaryContainer.withOpacity(0.8),
                               ),
@@ -752,9 +788,30 @@ class _EntityCard extends StatelessWidget {{
 
     def _generate_assistant(self) -> str:
         entities_names = ", ".join([f"'{c.name}'" for c in self.entities])
+        assistant_imports = []
+        actions = []
+        for entity in self.entities:
+            snake = self._to_snake_case(entity.name)
+            display = self._get_display_field(entity).name
+            assistant_imports += [f"import '../services/{snake}_service.dart';", f"import '{snake}/{snake}_form_screen.dart';"]
+            actions.append(f"""      case '{entity.name}':
+        if (create) {{
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const {entity.name}FormScreen()));
+          return 'Formulario de {entity.name} abierto. El registro solo se guarda al pulsar Crear.';
+        }}
+        final items = await {entity.name}Service().getAll();
+        if (count) return '${{items.length}} registros de {entity.name} disponibles.';
+        if (items.isEmpty) return 'No hay registros de {entity.name} disponibles.';
+        return items.take(20).map((item) => '${{item.id}}: ${{item.{display}}}').join('\\n');
+""")
+        assistant_imports_str = "\n".join(assistant_imports)
+        actions_str = "\n".join(actions)
         return f"""import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../services/api_config.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+{assistant_imports_str}
 
 /// Asistente local de comandos de voz y texto con reconocimiento de voz real.
 class AssistantScreen extends StatefulWidget {{
@@ -776,7 +833,7 @@ class _AssistantScreenState extends State<AssistantScreen> {{
   @override
   void initState() {{
     super.initState();
-    _initSpeech();
+    _restoreHistory();
     _messages.add(
       const _ChatMessage(
         text: '¡Hola! Soy tu asistente de GeneradorUML. Puedes consultar datos o darme comandos como:\\n'
@@ -812,66 +869,66 @@ class _AssistantScreenState extends State<AssistantScreen> {{
     if (mounted) setState(() {{}});
   }}
 
-  void _processCommand(String text) {{
-    if (text.trim().isEmpty) return;
+  bool _busy = false;
 
+  Future<void> _restoreHistory() async {{
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('assistant_history_${{ApiConfig.baseUrl}}');
+    if (saved == null || !mounted) return;
+    try {{
+      final list = jsonDecode(saved) as List;
+      setState(() {{
+        _messages.addAll(list.map((m) => _ChatMessage(text: m['text'] as String, isUser: m['isUser'] as bool)));
+      }});
+    }} catch (_) {{ /* Historial anterior incompatible. */ }}
+  }}
+
+  Future<void> _saveHistory() async {{
+    final prefs = await SharedPreferences.getInstance();
+    final recent = _messages.skip(_messages.length > 100 ? _messages.length - 100 : 0);
+    await prefs.setString('assistant_history_${{ApiConfig.baseUrl}}', jsonEncode(recent.map((m) => {{'text': m.text, 'isUser': m.isUser}}).toList()));
+  }}
+
+  Future<String> _runCommand(String entity, bool create, bool count) async {{
+    switch (entity) {{
+{actions_str}
+      default: return 'Indica una entidad: ${{_entities.join(", ")}}.';
+    }}
+  }}
+
+  Future<void> _processCommand(String text) async {{
+    if (text.trim().isEmpty || _busy) return;
     final userText = text.trim();
     _commandController.clear();
     setState(() {{
+      _busy = true;
       _messages.add(_ChatMessage(text: userText, isUser: true));
     }});
-
-    final lower = userText.toLowerCase();
-    String response = '';
-
-    if (lower.contains('servidor') || lower.contains('conexión') || lower.contains('backend')) {{
-      response = 'El servidor configurado es ${{ApiConfig.baseUrl}}. Puedes verificar la conexión desde la pantalla principal.';
-    }} else if (lower.contains('cuantos') || lower.contains('cuántos') || lower.contains('total')) {{
-      String foundEntity = 'registros';
-      for (final e in _entities) {{
-        if (lower.contains(e.toLowerCase())) {{
-          foundEntity = e;
-          break;
-        }}
-      }}
-      response = 'Para consultar el conteo en tiempo real de $foundEntity, accede a su módulo desde el panel principal. Los datos se actualizan automáticamente.';
-    }} else if (lower.contains('crear') || lower.contains('nuevo') || lower.contains('nueva') || lower.contains('registrar')) {{
-      String found = '';
-      for (final e in _entities) {{
-        if (lower.contains(e.toLowerCase())) {{
-          found = e;
-          break;
-        }}
-      }}
-      if (found.isNotEmpty) {{
-        response = 'Para registrar un nuevo $found, pulsa el botón flotante "+" dentro del listado de $found.';
+    String response;
+    try {{
+      final lower = userText.toLowerCase();
+      if (lower.contains('servidor') || lower.contains('conexión')) {{
+        response = await ApiConfig.checkConnection() ? 'Servidor disponible.' : 'Servidor no disponible. Las consultas pueden usar los datos guardados en este dispositivo.';
       }} else {{
-        response = 'Entidades disponibles para crear: ${{_entities.join(", ")}}.';
-      }}
-    }} else if (lower.contains('listar') || lower.contains('ver') || lower.contains('mostrar')) {{
-      String found = '';
-      for (final e in _entities) {{
-        if (lower.contains(e.toLowerCase())) {{
-          found = e;
-          break;
+        final entities = _entities.where((e) => lower.replaceAll(' ', '').contains(e.toLowerCase())).toList();
+        final create = RegExp(r'crear|nuevo|nueva|registrar').hasMatch(lower);
+        final count = RegExp(r'cuantos|cuántos|total|contar').hasMatch(lower);
+        final list = RegExp(r'listar|mostrar|consultar|ver').hasMatch(lower);
+        if (entities.length == 1 && (create || count || list)) {{
+          response = await _runCommand(entities.single, create, count);
+        }} else {{
+          response = 'Usa "listar", "contar" o "crear" y una entidad: ${{_entities.join(", ")}}. Las consultas muestran registros disponibles, incluidos los guardados localmente.';
         }}
       }}
-      if (found.isNotEmpty) {{
-        response = 'Abriendo módulo de $found. Puedes ver todos los registros y usar la barra de búsqueda superior.';
-      }} else {{
-        response = 'Módulos disponibles: ${{_entities.join(", ")}}.';
-      }}
-    }} else {{
-      response = 'Comando reconocido: "$userText". Puedes gestionar las entidades: ${{_entities.join(", ")}}.';
+    }} catch (e) {{
+      response = 'No se pudo completar la operación: $e';
     }}
-
-    Future.delayed(const Duration(milliseconds: 300), () {{
-      if (mounted) {{
-        setState(() {{
-          _messages.add(_ChatMessage(text: response, isUser: false));
-        }});
-      }}
+    if (!mounted) return;
+    setState(() {{
+      _busy = false;
+      _messages.add(_ChatMessage(text: response, isUser: false));
     }});
+    await _saveHistory();
   }}
 
   /// Inicia o detiene la escucha de voz real con speech_to_text.
@@ -882,6 +939,8 @@ class _AssistantScreenState extends State<AssistantScreen> {{
       return;
     }}
 
+    if (!_speechAvailable) await _initSpeech();
+    if (!mounted) return;
     if (!_speechAvailable) {{
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -967,7 +1026,7 @@ class _AssistantScreenState extends State<AssistantScreen> {{
                     decoration: BoxDecoration(
                       color: msg.isUser
                           ? colorScheme.primary
-                          : colorScheme.surfaceContainerHighest,
+                          : colorScheme.surfaceVariant,
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(16),
                         topRight: const Radius.circular(16),
@@ -1059,7 +1118,7 @@ class _ChatMessage {{
         for attr in attributes:
             dtype = self._dart_type(attr.type)
             is_pk = (attr.name == pk.name)
-            is_nullable = is_pk or dtype in ("DateTime", "int", "double", "bool") or getattr(attr, 'is_optional', False)
+            is_nullable = is_pk or dtype in ("DateTime", "int", "double", "bool", "List<int>") or getattr(attr, 'is_optional', False)
 
             null_mark = "?" if is_nullable else ""
             fields_decl.append(f"  final {dtype}{null_mark} {attr.name};")
@@ -1070,7 +1129,9 @@ class _ChatMessage {{
                 constructor_params.append(f"    required this.{attr.name},")
 
             # fromJson
-            if dtype == "DateTime":
+            if dtype == "List<int>":
+                from_json_fields.append(f"      {attr.name}: (json['{attr.name}'] as List?)?.map((x) => (x as num).toInt()).toList(),")
+            elif dtype == "DateTime":
                 from_json_fields.append(
                     f"      {attr.name}: json['{attr.name}'] != null ? DateTime.tryParse(json['{attr.name}'].toString()) : null,"
                 )
@@ -1093,7 +1154,7 @@ class _ChatMessage {{
 
             # toJson
             if dtype == "DateTime":
-                to_json_fields.append(f"      '{attr.name}': {attr.name}?.toIso8601String(),")
+                to_json_fields.append(f"      '{attr.name}': {attr.name}?.toIso8601String()" + (".split('T').first" if attr.type in ('Date', 'LocalDate') else "") + ",")
             else:
                 to_json_fields.append(f"      '{attr.name}': {attr.name},")
 
@@ -1741,7 +1802,7 @@ class _DetailTile extends StatelessWidget {{
         model_construction_fields = []
 
         for attr in cls.attributes:
-            if attr.name == pk.name:
+            if attr.name in (pk.name, "version"):
                 continue
 
             dtype = self._dart_type(attr.type)
@@ -1780,7 +1841,7 @@ class _DetailTile extends StatelessWidget {{
                 model_construction_fields.append(f"        {attr.name}: _{attr.name},")
             else:
                 controllers_decl.append(f"  final TextEditingController {c_name} = TextEditingController();")
-                controllers_init.append(f"    {c_name}.text = widget.item?.{attr.name}?.toString() ?? '';")
+                controllers_init.append(f"    {c_name}.text = widget.item?.{attr.name}?.join(',') ?? '';" if dtype == "List<int>" else f"    {c_name}.text = widget.item?.{attr.name}?.toString() ?? '';")
 
                 kb_type = "TextInputType.text"
                 if dtype in ("int", "double"):
@@ -1815,7 +1876,9 @@ class _DetailTile extends StatelessWidget {{
               ),
               const SizedBox(height: 16),""")
 
-                if dtype == "int":
+                if dtype == "List<int>":
+                    model_construction_fields.append(f"        {attr.name}: {c_name}.text.trim().isEmpty ? [] : {c_name}.text.split(',').map((v) => int.parse(v.trim())).toList(),")
+                elif dtype == "int":
                     model_construction_fields.append(f"        {attr.name}: int.tryParse({c_name}.text.trim()),")
                 elif dtype == "double":
                     model_construction_fields.append(f"        {attr.name}: double.tryParse({c_name}.text.trim()),")
@@ -1862,6 +1925,7 @@ class _{cls.name}FormScreenState extends State<{cls.name}FormScreen> {{
     try {{
       final itemToSave = {cls.name}(
         {pk.name}: widget.item?.{pk.name},
+        version: widget.item?.version,
 {model_construction_str}
       );
 
