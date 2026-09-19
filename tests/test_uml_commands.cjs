@@ -7,6 +7,9 @@ assert.throws(()=>parser.parse('hola como estas'));
 assert.throws(()=>parser.parse('crea clase Usuario con atributos nombre, nombre'));
 
 
-assert.equal(parser.parse('Creo una clase cliente con a tributos nombre de tipo texto y edad de tipo entero.').attributes.length,2);
+assert.equal(parser.parse('crea una gran Persona con atributo nombre de tipo texto y edad de tipo entero').name,'Persona');
+assert.equal(parser.parse('crea clase Usuario con atributo id de tipo id').attributes[0].type,'Long');
+assert.equal(parser.attributes('código: texto, precio: decimal')[0].name,'codigo');
+assert.equal(parser.attributes('código: texto, precio: decimal')[1].name,'precio');
 
-console.log('Comandos UML: 6 verificaciones correctas');
+console.log('Comandos UML: 11 verificaciones correctas');

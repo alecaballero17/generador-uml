@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GeneradorUML — Editor de Diagramas de Clases</title>
     <meta name="description" content="Herramienta CASE para crear, editar e interpretar diagramas de clases UML 2.5+ y generar aplicaciones completas.">
-    <link rel="stylesheet" href="css/index.css?v=20260918d">
-    <link rel="stylesheet" href="css/mobile.css?v=20260918d">
+    <link rel="stylesheet" href="css/index.css?v=20260918g">
+    <link rel="stylesheet" href="css/mobile.css?v=20260918g">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#0f0f14">
 </head>
@@ -16,16 +16,16 @@
         <div class="topbar-left">
             <div class="logo" id="logo">
                 <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                    <rect x="2" y="2" width="24" height="24" rx="6" stroke="url(#logoGrad)" stroke-width="2.5"/>
-                    <line x1="8" y1="9" x2="20" y2="9" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round"/>
-                    <line x1="8" y1="14" x2="20" y2="14" stroke="url(#logoGrad)" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
-                    <line x1="8" y1="19" x2="16" y2="19" stroke="url(#logoGrad)" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
                     <defs>
                         <linearGradient id="logoGrad" x1="0" y1="0" x2="28" y2="28">
                             <stop stop-color="#818cf8"/>
                             <stop offset="1" stop-color="#c084fc"/>
                         </linearGradient>
                     </defs>
+                    <rect x="2" y="2" width="24" height="24" rx="6" stroke="url(#logoGrad)" stroke-width="2.5"/>
+                    <line x1="8" y1="9" x2="20" y2="9" stroke="url(#logoGrad)" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="8" y1="14" x2="20" y2="14" stroke="url(#logoGrad)" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+                    <line x1="8" y1="19" x2="16" y2="19" stroke="url(#logoGrad)" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
                 </svg>
                 <span>GeneradorUML</span>
             </div>
@@ -76,22 +76,196 @@
 
     <!-- ─── Main Layout ─────────────────────────────────────────────── -->
     <section id="mobileWorkspace" aria-label="Graficador móvil">
-        <div class="mobile-intro"><span class="mobile-eyebrow">TU DIAGRAMA, DONDE ESTÉS</span><h1>De una idea a una clase.</h1><p>Dicta, escribe o toma una foto. Revisa el resultado y sigue construyendo el mismo diagrama con tu equipo.</p></div>
-        <div class="mobile-actions"><button id="mobileShare" class="btn-secondary">Compartir</button><button id="mobileImport" class="btn-secondary">Importar</button><button id="mobileExport" class="btn-secondary">Exportar</button></div>
-        <section class="mobile-card"><h2>¿Qué quieres crear?</h2><p>Prueba: «Crea una clase Usuario con atributos ID, nombre de tipo texto y edad de tipo entero».</p>
-            <textarea id="mobileCommand" aria-label="Comando para el diagrama" placeholder="Escribe o dicta una clase y sus atributos…"></textarea>
-            <div class="mobile-actions"><button id="mobileMic" class="btn-primary">Dictar diagrama</button><button id="reviewMobileCommand" class="btn-secondary">Revisar comando</button></div>
-            <p id="mobileReview" role="status">El comando se revisa antes de cambiar tu diagrama.</p><button id="applyMobileCommand" class="btn-primary" disabled>Aplicar al diagrama</button>
+        <!-- Modern Mobile Hero -->
+        <header class="mobile-hero">
+            <div class="mobile-hero-badge">
+                <span class="badge-dot"></span>
+                <span>ASISTENTE MÓVIL UML</span>
+            </div>
+            <h1 class="mobile-hero-title">Modelado Inteligente</h1>
+            <p class="mobile-hero-subtitle">Diseña clases por voz, escáner de fotos o formulario guiado en tiempo real.</p>
+            
+            <!-- Quick Action Cards Grid -->
+            <div class="mobile-quick-actions">
+                <button type="button" class="quick-action-card" id="btnQuickCreate">
+                    <div class="action-icon-wrap icon-create">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </div>
+                    <div class="action-info">
+                        <span class="action-label">Nueva Clase</span>
+                        <span class="action-desc">Formulario</span>
+                    </div>
+                </button>
+
+                <button type="button" class="quick-action-card" id="btnQuickVoice">
+                    <div class="action-icon-wrap icon-voice">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                    </div>
+                    <div class="action-info">
+                        <span class="action-label">Dictar Voz</span>
+                        <span class="action-desc">Whisper IA</span>
+                    </div>
+                </button>
+
+                <button type="button" class="quick-action-card" id="btnQuickPhoto">
+                    <div class="action-icon-wrap icon-photo">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                    </div>
+                    <div class="action-info">
+                        <span class="action-label">Foto / OCR</span>
+                        <span class="action-desc">Pizarra / Papel</span>
+                    </div>
+                </button>
+            </div>
+
+            <!-- Secondary Toolbar -->
+            <div class="mobile-secondary-toolbar">
+                <button type="button" id="mobileShare" class="chip-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg> Compartir</button>
+                <button type="button" id="mobileImport" class="chip-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Importar</button>
+                <button type="button" id="mobileExport" class="chip-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> Exportar</button>
+                <button type="button" id="btnToggleVisualCanvas" class="chip-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg> Canvas 2D</button>
+            </div>
+        </header>
+
+        <!-- Dynamic Studio: Voice Studio -->
+        <section class="mobile-card mobile-studio-card" id="mobileVoiceSection" hidden>
+            <div class="mobile-card-header">
+                <div class="card-title-group">
+                    <span class="card-icon-pill icon-voice">🎙️</span>
+                    <div>
+                        <h2>Estudio de Voz Whisper</h2>
+                        <p class="card-subtitle">IA en tu dispositivo · Sin enviar audio a la nube</p>
+                    </div>
+                </div>
+                <button type="button" class="icon-close-card" id="btnCloseVoiceSection" aria-label="Cerrar panel">×</button>
+            </div>
+
+            <div class="voice-interactive-hub">
+                <button type="button" id="mobileMic" class="mic-glow-button" aria-label="Iniciar o detener grabación por voz">
+                    <div class="mic-ripple-ring"></div>
+                    <div class="mic-inner-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                        </svg>
+                    </div>
+                </button>
+                <div class="voice-soundwaves" id="voiceSoundwaves">
+                    <span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <p id="mobileVoiceStatus" class="voice-status-pill" role="status">Toca el micrófono para comenzar</p>
+            </div>
+
+            <div class="voice-input-group">
+                <label for="mobileCommand" class="input-label">Texto reconocido / Comando</label>
+                <textarea id="mobileCommand" aria-label="Comando para el diagrama" placeholder="Ej: «Crea una clase Usuario con atributos nombre: texto y edad: entero»…"></textarea>
+                
+                <div class="voice-review-box">
+                    <div class="review-status-row">
+                        <span class="review-icon">⚡</span>
+                        <p id="mobileReview" role="status">El comando se revisa antes de cambiar tu diagrama.</p>
+                    </div>
+                </div>
+
+                <div class="card-button-row">
+                    <button type="button" id="reviewMobileCommand" class="btn-secondary">Revisar sintaxis</button>
+                    <button type="button" id="applyMobileCommand" class="btn-primary" disabled>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        Aplicar al Diagrama
+                    </button>
+                </div>
+            </div>
         </section>
-        <section class="mobile-card"><h2>Una foto también es un inicio</h2><p>El OCR lee el texto aquí. Revisa nombres y atributos; la lectura de escritura a mano puede necesitar correcciones.</p>
-            <label class="btn-secondary" for="mobilePhoto">Tomar o elegir foto</label><input id="mobilePhoto" type="file" accept="image/*" capture="environment" class="hidden-input">
-            <div id="mobilePhotoReview" hidden><p>Una clase por bloque: nombre en la primera línea, luego atributo: tipo. Separa las clases con una línea vacía.</p><textarea id="mobilePhotoText" aria-label="Texto de la foto para revisar"></textarea><button id="applyPhotoText" class="btn-primary">Importar texto revisado</button></div>
+
+        <!-- Dynamic Studio: Photo Scanner -->
+        <section class="mobile-card mobile-studio-card" id="mobilePhotoSection" hidden>
+            <div class="mobile-card-header">
+                <div class="card-title-group">
+                    <span class="card-icon-pill icon-photo">📷</span>
+                    <div>
+                        <h2>Escáner de Fotografía (OCR)</h2>
+                        <p class="card-subtitle">Convierte bocetos y pizarras en clases UML</p>
+                    </div>
+                </div>
+                <button type="button" class="icon-close-card" id="btnClosePhotoSection" aria-label="Cerrar panel">×</button>
+            </div>
+
+            <div class="photo-upload-zone">
+                <label class="photo-drop-target" for="mobilePhoto">
+                    <div class="drop-icon-circle">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                    </div>
+                    <span class="drop-primary-text">Tomar foto o elegir imagen</span>
+                    <span class="drop-sub-text">Captura una clase escrita en papel o pizarra</span>
+                </label>
+                <input id="mobilePhoto" type="file" accept="image/*" class="hidden-input">
+            </div>
+
+            <div id="mobilePhotoFeedback" class="photo-feedback-container">
+                <div class="preview-wrapper">
+                    <img id="mobilePhotoPreview" class="photo-preview-img" alt="Vista previa">
+                </div>
+                <p id="mobilePhotoStatus" role="status" class="photo-status-pill"></p>
+                <div id="mobilePhotoProgress" class="progress-track">
+                    <div id="mobilePhotoProgressBar" class="progress-bar-fill"></div>
+                </div>
+            </div>
+
+            <div id="mobilePhotoReview" class="photo-review-panel" hidden>
+                <div class="panel-header-tip">
+                    <span>💡 <b>Formato:</b> Primera línea = Nombre, siguientes = <code>atributo: tipo</code></span>
+                </div>
+                <textarea id="mobilePhotoText" aria-label="Texto de la foto para revisar" class="code-textarea" rows="4"></textarea>
+                <div class="photo-actions-row">
+                    <button type="button" id="btnVoiceSupplementPhoto" class="btn-secondary">
+                        🎙️ Dictar corrección o atributo
+                    </button>
+                    <button type="button" id="applyPhotoText" class="btn-primary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        Importar clases
+                    </button>
+                </div>
+            </div>
         </section>
-        <section class="mobile-card"><h2>Trabajar sin conexión</h2><p>Prepara los modelos una vez mientras tengas conexión. La voz y el OCR se procesan en tu dispositivo; los cambios del diagrama se guardan localmente y se sincronizan cuando regresa el servidor.</p>
-            <button id="prepareOffline" class="btn-secondary">Preparar voz y foto sin conexión</button><p id="mobileAIStatus" role="status">La generación de Spring Boot y Flutter requiere el servidor. La edición del diagrama puede ser local.</p>
-            <details class="mobile-help"><summary>Guía y prueba de audio</summary><p>Di «Crea clase Usuario con atributos id y nombre». Para ampliar: «Agrega atributo edad de tipo entero a clase Usuario». Puedes revisar y corregir la transcripción antes de aplicarla.</p><p>El reconocimiento usa un modelo local; la interpretación admite estos comandos concretos. En móvil, el micrófono requiere HTTPS. El acceso localhost sirve para probar en esta computadora.</p><label for="mobileAudio">Probar un audio grabado</label><input id="mobileAudio" type="file" accept="audio/*"></details>
+
+        <!-- Classes Section: Clean, visual UML Class Cards -->
+        <section class="mobile-card classes-overview-section">
+            <div class="classes-section-header">
+                <div class="classes-title-wrap">
+                    <span class="section-icon">🏛️</span>
+                    <h2>Clases del Diagrama</h2>
+                </div>
+                <span id="classesCountBadge" class="classes-count-badge">0 clases</span>
+            </div>
+            <p id="mobileResultStatus" class="result-feedback-toast" role="status"></p>
+            <div id="mobileClasses" class="classes-card-grid"></div>
         </section>
-        <section class="mobile-card"><h2>Clases del diagrama</h2><div id="mobileClasses"></div></section>
+
+        <!-- Offline & Model Hub -->
+        <details class="mobile-accordion-card" id="offlineSettingsCard">
+            <summary class="accordion-summary">
+                <div class="summary-left">
+                    <span class="summary-icon">⚙️</span>
+                    <div>
+                        <span class="summary-title">Modelos locales y funcionamiento offline</span>
+                        <span class="summary-subtitle">Whisper WASM y Tesseract OCR</span>
+                    </div>
+                </div>
+                <span class="summary-arrow">›</span>
+            </summary>
+            <div class="accordion-content">
+                <p class="offline-desc">Los modelos de voz y visión funcionan en la memoria de tu teléfono sin enviar datos a internet. Pulsa a continuación para precargarlos:</p>
+                <button type="button" id="prepareOffline" class="btn-secondary full-width-btn">⚡ Descargar y preparar modelos offline</button>
+                <p id="mobileAIStatus" role="status" class="ai-status-note">La generación de código backend Spring Boot y Flutter requiere conexión al servidor.</p>
+                
+                <div class="audio-test-box">
+                    <label for="mobileAudio" class="input-label">Probar archivo de audio grabado:</label>
+                    <input id="mobileAudio" type="file" accept="audio/*" class="file-input-clean">
+                </div>
+            </div>
+        </details>
     </section>
 
     <main id="mainLayout">
@@ -574,13 +748,60 @@
         </div>
     </div>
 
+    <!-- ─── Mobile Class Form Dialog (Modern Modal Sheet) ────────── -->
+    <dialog id="mobileClassForm" class="mobile-bottom-sheet">
+        <form class="mobile-sheet-form">
+            <div class="sheet-header">
+                <div class="sheet-title-group">
+                    <span class="sheet-header-icon">✨</span>
+                    <h2 id="mobileFormTitle">Crear Nueva Clase</h2>
+                </div>
+                <button type="button" class="sheet-close-btn" id="cancelMobileFormClose" aria-label="Cerrar">×</button>
+            </div>
+            <div class="sheet-body">
+                <label id="simpleClassLabel" class="sheet-field-label">
+                    <span class="label-title">Nombre de la clase</span>
+                    <input id="simpleClassName" class="sheet-input" placeholder="Ej: Pedido, Cliente, Producto" required autocomplete="off">
+                </label>
+                <div class="attribute-subgroup">
+                    <span class="subgroup-title">Primer Atributo (Opcional)</span>
+                    <div class="fields-row">
+                        <label class="sheet-field-label flex-1">
+                            <span class="label-title">Nombre</span>
+                            <input id="simpleAttributeName" class="sheet-input" placeholder="Ej: precio" autocomplete="off">
+                        </label>
+                        <label class="sheet-field-label flex-1">
+                            <span class="label-title">Tipo</span>
+                            <select id="simpleAttributeType" class="sheet-select">
+                                <option value="String">Texto (String)</option>
+                                <option value="Integer">Entero (Integer)</option>
+                                <option value="Double">Decimal (Double)</option>
+                                <option value="Boolean">Booleano (Boolean)</option>
+                                <option value="LocalDate">Fecha (LocalDate)</option>
+                                <option value="Long">Identificador (Long)</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+                <p id="mobileFormError" class="sheet-error-msg" role="alert"></p>
+            </div>
+            <div class="sheet-footer">
+                <button type="button" class="btn-secondary" id="cancelMobileForm">Cancelar</button>
+                <button type="submit" class="btn-primary" id="saveMobileFormBtn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Guardar
+                </button>
+            </div>
+        </form>
+    </dialog>
+
     <!-- Hidden file inputs -->
     <input type="file" id="importFileInput" accept=".json,.mdj,.xmi,.xml" class="hidden-input">
 
-    <script src="js/collaboration.js?v=20260918d"></script>
-    <script src="js/uml-commands.js?v=20260918d"></script>
-    <script src="js/app.js?v=20260918d"></script>
-    <script src="js/local-ai.js?v=20260918d"></script>
-    <script src="js/mobile.js?v=20260918d"></script>
+    <script src="js/collaboration.js?v=20260918g"></script>
+    <script src="js/uml-commands.js?v=20260918g"></script>
+    <script src="js/app.js?v=20260918g"></script>
+    <script src="js/local-ai.js?v=20260918g"></script>
+    <script src="js/mobile.js?v=20260918g"></script>
 </body>
 </html>

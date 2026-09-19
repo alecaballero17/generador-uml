@@ -1,5 +1,5 @@
 const localAI={worker:null,pending:null,recorder:null,stream:null,chunks:[],timer:null};
-function aiStatus(message) {document.getElementById('mobileAIStatus').textContent=message;}
+function aiStatus(message) {document.getElementById('mobileAIStatus').textContent=message; const voiceStatus=document.getElementById('mobileVoiceStatus');if(voiceStatus)voiceStatus.textContent=message;}
 function runLocalVoice(payload) {
     if(localAI.pending) return Promise.reject(new Error('Espera a que termine el audio anterior'));
     if(!localAI.worker) {
@@ -26,29 +26,81 @@ async function transcribeLocalFile(file,language='spanish') {
         const source=offline.createBufferSource();source.buffer=decoded;source.connect(offline.destination);source.start();
         const audio=(await offline.startRendering()).getChannelData(0);
         const result=await runLocalVoice({type:'transcribe',audio,language});
-        document.getElementById('mobileCommand').value=result.text;
-        aiStatus('Transcripción local lista. Revisa el texto y pulsa Revisar comando.');
+        console.log('Transcripción obtenida:', result.text);
+
+        if (localAI.photoTarget) {
+            localAI.photoTarget = false;
+            const photoArea = document.getElementById('mobilePhotoText');
+            if (photoArea) {
+                let textToAdd = '';
+                try {
+                    const plan = UMLCommands.parse(result.text);
+                    if (plan.action === 'createClass') {
+                        const lines = [plan.name, ...plan.attributes.map(a => `${a.name}: ${a.type}`)];
+                        textToAdd = lines.join('\n');
+                    } else if (plan.action === 'addAttributes') {
+                        textToAdd = plan.attributes.map(a => `${a.name}: ${a.type}`).join('\n');
+                    }
+                } catch(e) {
+                    textToAdd = result.text.trim();
+                }
+                if (textToAdd) {
+                    photoArea.value = (photoArea.value.trim() ? photoArea.value.trim() + '\n' : '') + textToAdd;
+                }
+                const photoReview = document.getElementById('mobilePhotoReview');
+                if (photoReview) photoReview.hidden = false;
+                const status = document.getElementById('mobilePhotoStatus');
+                if (status) status.textContent = `Voz aplicada al borrador: "${result.text}".`;
+                aiStatus(`Voz añadida al borrador de la foto.`);
+                return;
+            }
+        }
+
+        const commandInput=document.getElementById('mobileCommand');
+        commandInput.value=result.text;
+        commandInput.dispatchEvent(new Event('input',{bubbles:true}));
+        if(typeof reviewMobileCommand==='function') {
+            reviewMobileCommand();
+        }
+        aiStatus(`Transcripción: "${result.text}". Revisa la propuesta y pulsa Aplicar al diagrama.`);
     } finally {await context.close();}
 }
-async function toggleLocalRecording() {
-    const button=document.getElementById('mobileMic');
+async function toggleLocalRecording(forPhoto = false) {
+    const button=forPhoto ? document.getElementById('btnVoiceSupplementPhoto') : document.getElementById('mobileMic');
     if(localAI.recorder?.state==='recording') {localAI.recorder.stop();return;}
+    localAI.photoTarget = !!forPhoto;
     try {
-        aiStatus('Preparando el motor antes de grabar…');button.disabled=true;
+        aiStatus('Preparando el motor antes de grabar…');if(button)button.disabled=true;
         await runLocalVoice({type:'prepare'});
-        localAI.stream=await navigator.mediaDevices.getUserMedia({audio:true});
+        try {
+            localAI.stream=await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+            });
+        } catch(audioErr) {
+            localAI.stream=await navigator.mediaDevices.getUserMedia({audio:true});
+        }
         localAI.chunks=[];
         localAI.recorder=new MediaRecorder(localAI.stream);
         localAI.recorder.ondataavailable=e=>{if(e.data.size)localAI.chunks.push(e.data);};
         localAI.recorder.onstop=async()=>{
-            clearTimeout(localAI.timer);localAI.stream.getTracks().forEach(track=>track.stop());
-            button.textContent='Dictar diagrama';button.disabled=true;
-            try {await transcribeLocalFile(new Blob(localAI.chunks,{type:localAI.recorder.mimeType}));}catch(e){aiStatus(e.message);}finally{button.disabled=false;}
+            if(button) {
+                button.classList.remove('is-recording');
+                button.textContent=forPhoto ? '🎙️ Dictar corrección o atributo' : 'Dictar diagrama';
+                button.disabled=true;
+            }
+            aiStatus('Grabación terminada. Transcribiendo en este dispositivo…');
+            clearTimeout(localAI.timer);localAI.stream?.getTracks().forEach(track=>track.stop());
+            try {await transcribeLocalFile(new Blob(localAI.chunks,{type:localAI.recorder.mimeType}));}catch(e){aiStatus(e.message);}finally{if(button)button.disabled=false;}
         };
-        localAI.recorder.start();button.textContent='Detener grabación';button.disabled=false;
-        aiStatus('Grabando. Tu audio se procesa aquí y no se envía al servidor.');
+        localAI.recorder.start();
+        if(button) {
+            button.classList.add('is-recording');
+            button.textContent='● Escuchando — Detener';
+            button.disabled=false;
+        }
+        aiStatus(forPhoto ? 'Grabando corrección para la foto… Di el nombre de clase o atributos.' : 'Grabando comando de diagrama…');
         localAI.timer=setTimeout(()=>{if(localAI.recorder?.state==='recording')localAI.recorder.stop();},30000);
-    } catch(error) {localAI.stream?.getTracks().forEach(track=>track.stop());aiStatus(error.message);button.disabled=false;}
+    } catch(error) {localAI.stream?.getTracks().forEach(track=>track.stop());aiStatus('Error de micrófono: '+(error.message||error.name));if(button)button.disabled=false;}
 }
 async function prepareOffline() {
     const button=document.getElementById('prepareOffline');button.disabled=true;
@@ -68,10 +120,50 @@ async function prepareOffline() {
     } catch(error) {aiStatus(error.message);} finally {button.disabled=false;}
 }
 async function recognizeLocalPhoto(file) {
+    const statusEl = document.getElementById('mobilePhotoStatus');
+    const progBar = document.getElementById('mobilePhotoProgressBar');
+    const progBox = document.getElementById('mobilePhotoProgress');
+    const update = (msg, pct = null) => {
+        aiStatus(msg);
+        if (statusEl) statusEl.textContent = msg;
+        if (progBox && progBar) {
+            if (pct !== null) {
+                progBox.style.display = 'block';
+                progBar.style.width = Math.min(100, Math.max(0, pct)) + '%';
+            } else {
+                progBox.style.display = 'none';
+            }
+        }
+    };
     if(!window.Tesseract) {
-        await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/assets/vendor/tesseract.min.js';script.onload=resolve;script.onerror=()=>reject(new Error('Prepara los archivos OCR antes de desconectarte'));document.head.append(script);});
+        update('Cargando motor OCR local…', 10);
+        await new Promise((resolve,reject)=>{
+            const script=document.createElement('script');
+            script.src='/assets/vendor/tesseract.min.js';
+            script.onload=resolve;
+            script.onerror=()=>reject(new Error('No se pudo cargar el archivo tesseract.min.js'));
+            document.head.append(script);
+        });
     }
-    aiStatus('Leyendo la imagen en este dispositivo…');
-    const worker=await Tesseract.createWorker('eng',1,{workerPath:'/assets/vendor/worker.min.js',corePath:'/assets/vendor/',langPath:'/assets/vendor/',logger:m=>{if(m.status)aiStatus(`Foto: ${m.status} ${Math.round((m.progress||0)*100)}%`);}});
-    try {const result=await worker.recognize(file);return result.data.text;}finally{await worker.terminate();}
+    update('Iniciando lector de imagen local…', 25);
+    const worker=await Tesseract.createWorker('eng',1,{
+        workerPath:'/assets/vendor/worker.min.js',
+        corePath:'/assets/vendor/',
+        langPath:'/assets/vendor/',
+        gzip: false,
+        logger:m=>{
+            if(m.status) {
+                const pct = Math.round((m.progress||0)*100);
+                update(`Foto: ${m.status} (${pct}%)`, Math.max(25, pct));
+            }
+        }
+    });
+    try {
+        update('Reconociendo texto en la imagen…', 75);
+        const result=await worker.recognize(file);
+        update('¡Texto reconocido con éxito!', 100);
+        return result.data.text;
+    } finally {
+        await worker.terminate();
+    }
 }

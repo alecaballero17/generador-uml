@@ -10,21 +10,57 @@
     }
     function attributes(text) {
         if (!text?.trim()) return [];
-        const types={texto:'String',cadena:'String',string:'String',entero:'Integer',integer:'Integer',int:'Integer',long:'Long',decimal:'Double',double:'Double',booleano:'Boolean',boolean:'Boolean',bool:'Boolean',fecha:'LocalDate',localdate:'LocalDate'};
+        const types={
+            texto:'String',cadena:'String',string:'String',text:'String',
+            entero:'Integer',integer:'Integer',int:'Integer',numero:'Integer',
+            long:'Long',id:'Long',ide:'Long',identificador:'Long',
+            decimal:'Double',double:'Double',flotante:'Double',float:'Double',
+            booleano:'Boolean',boolean:'Boolean',bool:'Boolean',
+            fecha:'LocalDate',localdate:'LocalDate',date:'LocalDate'
+        };
+        const defaultNames={
+            Integer:'edad',
+            Long:'id',
+            String:'descripcion',
+            Double:'monto',
+            Boolean:'activo',
+            LocalDate:'fecha'
+        };
         const parts=text.replace(/\s+y\s+/gi,',').split(/[,;]/).map(s=>s.trim()).filter(Boolean);
-        const result=parts.map(part=>{
-            const match=part.match(/^(.+?)(?:\s+(?:de\s+)?tipo\s+|\s*:\s*)([a-z]+)$/i);
-            const name=identifier(match?match[1]:part);
-            const type=match?types[match[2].toLowerCase()]:name.toLowerCase()==='id'?'Long':'String';
-            if (!type) throw new Error('Tipo no reconocido; usa texto, entero, decimal, booleano o fecha');
+        const result=parts.map((part,index)=>{
+            let match=part.match(/^(?:(.+?)(?:\s+(?:de\s+)?tipo\s+|\s*:\s*))([a-z]+)$/i);
+            let rawName, typeKey;
+            if(match) {
+                rawName=match[1].trim();
+                typeKey=match[2].toLowerCase();
+                if(/^(de|del)$/i.test(rawName)) rawName=null;
+            } else {
+                match=part.match(/^(?:de\s+tipo\s+|:\s*)([a-z]+)$/i);
+                if(match) { typeKey=match[1].toLowerCase(); rawName=null; }
+                else { rawName=part.trim(); typeKey=null; }
+            }
+            let type=typeKey&&types[typeKey]?types[typeKey]:(part.toLowerCase().includes('id')?'Long':'String');
+            if(!rawName) {
+                if(!match&&!types[part.trim().toLowerCase()]) {
+                    rawName=part.trim();
+                } else {
+                    rawName=defaultNames[type]||('atributo'+(index+1));
+                }
+            }
+            const name=identifier(rawName);
             return {name,type};
         });
         if(new Set(result.map(a=>a.name.toLowerCase())).size!==result.length) throw new Error('Hay atributos repetidos');
         return result;
     }
     function parse(text) {
-        const clean=normalize(text).replace(/[.!?]+$/,'').replace(/\ba tributos\b/gi,'atributos');
-        let match=clean.match(/^(?:por favor\s+)?(?:crear|crea|creame|creo|agrega|agregar)\s+(?:una\s+|la\s+)?clase\s+(?:llamada\s+)?(.+?)(?:\s+(?:que\s+tenga|con)\s+(?:los\s+)?(?:atributos?\s+)?(.+))?$/i);
+        let clean=normalize(text).replace(/[.!?]+$/,'')
+            .replace(/\b(?:la|el|los|las)?\s*tributos?\b/gi,'atributos')
+            .replace(/\b(?:atrivutos|adributos)\b/gi,'atributos')
+            .replace(/\b(?:una\s+)?gran\s+([a-zA-Z])/gi,'clase $1')
+            .replace(/\b(?:i\s*de|i\s*d)\b/gi,'id')
+            .replace(/\bde\s+tipo\s+ide\b/gi,'de tipo id');
+        let match=clean.match(/^(?:por favor\s+)?(?:quiero\s+(?:crear|una)|necesito\s+(?:crear|una)|creo\s+que\s+es|crear|crea|creame|creo|agrega|agregar|haz|genera|generar|nueva)?\s*(?:una\s+|la\s+|el\s+)?clase\s+(?:llamada\s+)?(.+?)(?:\s+(?:que\s+tenga|con)\s+(?:los\s+|las\s+|el\s+|la\s+)?(?:atributos?|campos?|propiedades?)\s*(.*))?$/i);
         if(match) return {action:'createClass',name:identifier(match[1],true),attributes:attributes(match[2])};
         match=clean.match(/^(?:agrega|agregar|anade|anadir)\s+(?:el\s+|los\s+)?atributos?\s+(.+?)\s+(?:a|en)\s+(?:la\s+)?clase\s+(.+)$/i);
         if(match) return {action:'addAttributes',name:identifier(match[2],true),attributes:attributes(match[1])};

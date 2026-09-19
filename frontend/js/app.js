@@ -889,6 +889,7 @@ canvasContainer.addEventListener('mouseup', (e) => {
 
 // Mouse wheel for zoom
 canvasContainer.addEventListener('wheel', (e) => {
+    if(document.body.classList.contains('mobile-editor') && !e.ctrlKey && !e.metaKey)return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.05 : 0.05;
     const newZoom = Math.max(0.2, Math.min(3, state.zoom + delta));
