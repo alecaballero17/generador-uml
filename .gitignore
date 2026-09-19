@@ -45,3 +45,16 @@ Desktop.ini
 .runtime/
 .tools/
 .pytest_cache/
+.env
+*.env
+
+# Build outputs & binaries
+target/
+*.class
+**/target/
+**/build/
+.gradle/
+
+# Temporary test screenshots & scratch scripts
+mobile_*.png
+scratch/

@@ -1755,8 +1755,9 @@ $('#btnProcessPhoto').addEventListener('click', async () => {
     try {
         const formData = new FormData();
         formData.append('file', state.pendingPhotoFile);
-
-        const response = await fetch('/api/photo/interpret', {
+        const isMobile = (location.host === 'appassets.androidplatform.net' || location.protocol === 'file:');
+        const apiOrigin = isMobile ? 'http://127.0.0.1:8000' : '';
+        const response = await fetch(`${apiOrigin}/api/photo/interpret`, {
             method: 'POST',
             body: formData,
         });

@@ -263,7 +263,54 @@ function initMobileEditor() {
                 voiceSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
             if (photoSec) photoSec.hidden = true;
-            toggleLocalRecording();
+            if (window.ConversationalAssistant) {
+                ConversationalAssistant.toggleVoiceSession();
+            } else {
+                toggleLocalRecording();
+            }
+        };
+    }
+
+    const siriOrb = document.getElementById('siriOrb');
+    if (siriOrb) {
+        siriOrb.onclick = () => {
+            if (window.ConversationalAssistant) {
+                ConversationalAssistant.toggleVoiceSession();
+            } else {
+                toggleLocalRecording();
+            }
+        };
+    }
+
+    const btnSiriStopRecording = document.getElementById('btnSiriStopRecording');
+    if (btnSiriStopRecording) {
+        btnSiriStopRecording.onclick = () => {
+            if (window.ConversationalAssistant) {
+                ConversationalAssistant.toggleVoiceSession();
+            } else if (typeof localAI !== 'undefined' && localAI.recorder?.state === 'recording') {
+                localAI.recorder.stop();
+            }
+        };
+    }
+
+    const siriTextInput = document.getElementById('siriTextInput');
+    const btnSiriSendText = document.getElementById('btnSiriSendText');
+    const sendSiriText = () => {
+        if (!siriTextInput || !siriTextInput.value.trim()) return;
+        if(typeof ConversationalAssistant!=='undefined' && ConversationalAssistant.isBusy()){ConversationalAssistant.updateOrbState('thinking','Estoy procesando el pedido anterior. Tu texto no se borró.');return;}
+        const msg = siriTextInput.value.trim();
+        siriTextInput.value = '';
+        if (window.ConversationalAssistant) {
+            ConversationalAssistant.processMessage(msg);
+        }
+    };
+    if (btnSiriSendText) btnSiriSendText.onclick = sendSiriText;
+    if (siriTextInput) {
+        siriTextInput.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendSiriText();
+            }
         };
     }
 
@@ -282,7 +329,17 @@ function initMobileEditor() {
 
     // Close buttons on studio cards
     const btnCloseVoice = document.getElementById('btnCloseVoiceSection');
-    if (btnCloseVoice) btnCloseVoice.onclick = () => { if (voiceSec) voiceSec.hidden = true; };
+    if (btnCloseVoice) {
+        btnCloseVoice.onclick = () => {
+            if (voiceSec) voiceSec.hidden = true;
+            if (window.ConversationalAssistant) {
+                ConversationalAssistant.stopSpeaking();
+            }
+            if (typeof localAI !== 'undefined' && localAI.recorder?.state === 'recording') {
+                localAI.recorder.stop();
+            }
+        };
+    }
 
     const btnClosePhoto = document.getElementById('btnClosePhotoSection');
     if (btnClosePhoto) btnClosePhoto.onclick = () => { if (photoSec) photoSec.hidden = true; };

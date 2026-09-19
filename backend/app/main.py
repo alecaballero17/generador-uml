@@ -32,6 +32,7 @@ from .services.postman_generator import PostmanGenerator
 from .services.xmi_adapter import XMIAdapter
 from .services.mdj_adapter import MDJAdapter
 from .services.photo_interpreter import PhotoInterpreter
+from .services.gemini_assistant import GeminiAssistant
 
 # ─── App Setup ─────────────────────────────────────────────────────────────
 
@@ -489,6 +490,35 @@ async def interpret_photo(file: UploadFile = File(...)):
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error interpretando imagen: {str(e)}")
+
+
+# ─── Conversational Voice Assistant (Siri UML) ───────────────────────────
+
+class AssistantConverseRequest(BaseModel):
+    message: str
+    diagram: Optional[dict] = None
+    history: Optional[list] = None
+
+@app.get("/api/health")
+async def health_check():
+    """Health check para validar conectividad entre móvil y backend."""
+    return {"status": "ok", "service": "GeneradorUML"}
+
+@app.post("/api/assistant/converse")
+async def assistant_converse(req: AssistantConverseRequest):
+    """Asistente conversacional de voz tipo Siri para modelado UML."""
+    try:
+        assistant = GeminiAssistant()
+        result = await assistant.converse(
+            message=req.message,
+            current_diagram=req.diagram,
+            history=req.history
+        )
+        return {"status": "ok", **result}
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en asistente: {str(e)}")
 
 
 from .services.collaboration import router as collaboration_router

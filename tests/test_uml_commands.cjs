@@ -13,3 +13,6 @@ assert.equal(parser.attributes('código: texto, precio: decimal')[0].name,'codig
 assert.equal(parser.attributes('código: texto, precio: decimal')[1].name,'precio');
 
 console.log('Comandos UML: 11 verificaciones correctas');
+
+assert.throws(()=>parser.parse('Creo una clase usuario con híde nombre y teléfono.'));
+assert.throws(()=>parser.parse('Crea una clase Usuario con id, nombre y telefono'));

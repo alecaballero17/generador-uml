@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GeneradorUML — Editor de Diagramas de Clases</title>
     <meta name="description" content="Herramienta CASE para crear, editar e interpretar diagramas de clases UML 2.5+ y generar aplicaciones completas.">
-    <link rel="stylesheet" href="css/index.css?v=20260918g">
-    <link rel="stylesheet" href="css/mobile.css?v=20260918g">
+    <link rel="stylesheet" href="css/index.css?v=20260919assistant4">
+    <link rel="stylesheet" href="css/mobile.css?v=20260919assistant4">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#0f0f14">
 </head>
@@ -127,56 +127,68 @@
             </div>
         </header>
 
-        <!-- Dynamic Studio: Voice Studio -->
-        <section class="mobile-card mobile-studio-card" id="mobileVoiceSection" hidden>
+        <!-- Dynamic Studio: Siri UML Conversational Voice Assistant -->
+        <section class="mobile-card mobile-studio-card siri-assistant-card" id="mobileVoiceSection" hidden>
             <div class="mobile-card-header">
                 <div class="card-title-group">
-                    <span class="card-icon-pill icon-voice">🎙️</span>
+                    <span class="card-icon-pill icon-voice">✨</span>
                     <div>
-                        <h2>Estudio de Voz Whisper</h2>
-                        <p class="card-subtitle">IA en tu dispositivo · Sin enviar audio a la nube</p>
+                        <h2>Siri UML — Asistente de Voz</h2>
+                        <p class="card-subtitle">Conversación natural en español · Gemini Flash</p>
                     </div>
                 </div>
                 <button type="button" class="icon-close-card" id="btnCloseVoiceSection" aria-label="Cerrar panel">×</button>
             </div>
 
-            <div class="voice-interactive-hub">
-                <button type="button" id="mobileMic" class="mic-glow-button" aria-label="Iniciar o detener grabación por voz">
-                    <div class="mic-ripple-ring"></div>
-                    <div class="mic-inner-icon">
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <div class="siri-orb-stage">
+                <!-- Siri Glowing Interactive Orb -->
+                <div class="siri-orb state-ready" id="siriOrb" role="button" tabindex="0" aria-label="Hablar con Siri UML o detener">
+                    <div class="siri-orb-glow"></div>
+                    <div class="siri-orb-inner">
+                        <!-- Mic Icon (Default / Speaking / Idle) -->
+                        <svg class="orb-icon-mic" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                             <line x1="12" y1="19" x2="12" y2="23"></line>
                             <line x1="8" y1="23" x2="16" y2="23"></line>
                         </svg>
+                        <!-- Stop Icon (When Recording / Listening) -->
+                        <svg class="orb-icon-stop" width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="5" y="5" width="14" height="14" rx="3"></rect>
+                        </svg>
                     </div>
-                </button>
-                <div class="voice-soundwaves" id="voiceSoundwaves">
+                </div>
+                <div class="voice-soundwaves" id="siriSoundwaves">
                     <span></span><span></span><span></span><span></span><span></span>
                 </div>
-                <p id="mobileVoiceStatus" class="voice-status-pill" role="status">Toca el micrófono para comenzar</p>
+                <button type="button" id="btnSiriStopRecording" class="siri-stop-btn" style="display:none;">
+                    <span class="pulse-dot"></span> Detener y Procesar
+                </button>
+                <p id="siriStatusText" class="voice-status-pill" role="status">Toca el orbe para hablar con Siri UML</p>
             </div>
 
-            <div class="voice-input-group">
-                <label for="mobileCommand" class="input-label">Texto reconocido / Comando</label>
-                <textarea id="mobileCommand" aria-label="Comando para el diagrama" placeholder="Ej: «Crea una clase Usuario con atributos nombre: texto y edad: entero»…"></textarea>
-                
-                <div class="voice-review-box">
-                    <div class="review-status-row">
-                        <span class="review-icon">⚡</span>
-                        <p id="mobileReview" role="status">El comando se revisa antes de cambiar tu diagrama.</p>
-                    </div>
-                </div>
-
-                <div class="card-button-row">
-                    <button type="button" id="reviewMobileCommand" class="btn-secondary">Revisar sintaxis</button>
-                    <button type="button" id="applyMobileCommand" class="btn-primary" disabled>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        Aplicar al Diagrama
-                    </button>
+            <!-- Conversational Chat Feed -->
+            <div class="siri-chat-feed" id="siriChatFeed">
+                <div class="siri-bubble siri-bubble-assistant">
+                    <p class="bubble-text">¡Hola! Soy Siri UML. Háblame de tu proyecto o pídeme crear y modificar clases con tus propias palabras.</p>
                 </div>
             </div>
+
+            <!-- Quick Text Input Toggle (for typing if in noisy places) -->
+            <div class="siri-text-fallback">
+                <input type="text" id="siriTextInput" placeholder="O escribe un mensaje para Siri UML..." class="siri-input-field" autocomplete="off">
+                <button type="button" id="btnSiriSendText" class="siri-send-btn" aria-label="Enviar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </div>
+
+            <!-- Hidden command textarea for backward compatibility with local tests -->
+            <textarea id="mobileCommand" aria-label="Comando para el diagrama" style="display:none;"></textarea>
+            <button id="reviewMobileCommand" style="display:none;"></button>
+            <button id="applyMobileCommand" style="display:none;"></button>
+            <p id="mobileReview" style="display:none;"></p>
+            <button id="mobileMic" style="display:none;"></button>
+            <p id="mobileVoiceStatus" style="display:none;"></p>
         </section>
 
         <!-- Dynamic Studio: Photo Scanner -->
@@ -798,10 +810,11 @@
     <!-- Hidden file inputs -->
     <input type="file" id="importFileInput" accept=".json,.mdj,.xmi,.xml" class="hidden-input">
 
-    <script src="js/collaboration.js?v=20260918g"></script>
-    <script src="js/uml-commands.js?v=20260918g"></script>
-    <script src="js/app.js?v=20260918g"></script>
-    <script src="js/local-ai.js?v=20260918g"></script>
-    <script src="js/mobile.js?v=20260918g"></script>
+    <script src="js/collaboration.js?v=20260919assistant4"></script>
+    <script src="js/uml-commands.js?v=20260919assistant4"></script>
+    <script src="js/app.js?v=20260919assistant4"></script>
+    <script src="js/local-ai.js?v=20260919assistant4"></script>
+    <script src="js/mobile.js?v=20260919assistant4"></script>
+    <script src="js/conversational-assistant.js?v=20260919assistant4"></script>
 </body>
 </html>

@@ -61,7 +61,10 @@
             .replace(/\b(?:i\s*de|i\s*d)\b/gi,'id')
             .replace(/\bde\s+tipo\s+ide\b/gi,'de tipo id');
         let match=clean.match(/^(?:por favor\s+)?(?:quiero\s+(?:crear|una)|necesito\s+(?:crear|una)|creo\s+que\s+es|crear|crea|creame|creo|agrega|agregar|haz|genera|generar|nueva)?\s*(?:una\s+|la\s+|el\s+)?clase\s+(?:llamada\s+)?(.+?)(?:\s+(?:que\s+tenga|con)\s+(?:los\s+|las\s+|el\s+|la\s+)?(?:atributos?|campos?|propiedades?)\s*(.*))?$/i);
-        if(match) return {action:'createClass',name:identifier(match[1],true),attributes:attributes(match[2])};
+        if(match) {
+            if(/\b(?:con|tenga|atributos?|campos?)\b/i.test(match[1]))throw new Error('No pude separar el nombre de la clase de sus atributos. Usa: Usuario con atributos id, nombre y telefono.');
+            return {action:'createClass',name:identifier(match[1],true),attributes:attributes(match[2])};
+        }
         match=clean.match(/^(?:agrega|agregar|anade|anadir)\s+(?:el\s+|los\s+)?atributos?\s+(.+?)\s+(?:a|en)\s+(?:la\s+)?clase\s+(.+)$/i);
         if(match) return {action:'addAttributes',name:identifier(match[2],true),attributes:attributes(match[1])};
         match=clean.match(/^(?:elimina|eliminar|borra|borrar)\s+(?:la\s+)?clase\s+(.+)$/i);

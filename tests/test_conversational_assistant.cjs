@@ -1,0 +1,26 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const replies=[],requests=[],spoken=[];
+let orbState='';const orb={classList:{remove(){},add(value){orbState=value}},style:{}};
+const ctx={console,crypto:require('crypto').webcrypto,setTimeout,clearTimeout,AbortController,SpeechSynthesisUtterance:function(text){this.text=text},localStorage:{getItem:()=>null},document:{getElementById:id=>id==='siriOrb'?orb:null},window:{location:{host:'localhost',protocol:'http:',origin:'http://localhost'},addEventListener(){},speechSynthesis:{cancel(){},getVoices:()=>[],speak(u){spoken.push(u.text)}}},fetch:async(path,options)=>{requests.push(JSON.parse(options.body));return {ok:true,json:async()=>replies.shift()}}};
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync('frontend/js/app.js','utf8').split('const state =')[0]+`\nconst state={model:new UMLModel()};const collaborationState={role:'admin'};const sameDiagram=(a,b)=>JSON.stringify(a)===JSON.stringify(b);function saveUndo(){}function renderAll(){}function persistCollaboration(){}function broadcastChange(){}function refreshMobileCards(){}`,ctx);
+vm.runInContext(fs.readFileSync('frontend/js/conversational-assistant.js','utf8'),ctx);
+const run=text=>vm.runInContext(`ConversationalAssistant.processMessage(${JSON.stringify(text)})`,ctx);
+const diagram=()=>JSON.parse(vm.runInContext('JSON.stringify(state.model.toJSON())',ctx));
+(async()=>{
+replies.push({spoken_response:'Inventado',actions:[{action:'createClass',name:'Usuario',attributes:[{name:'id',type:'Long'},{name:'nombre',type:'String'},{name:'telefono',type:'String'}]}]});await run('Crea Usuario con id nombre telefono');assert.equal(diagram().classes[0].attributes.length,3);assert(!spoken.at(-1).includes('Inventado'));assert.equal(orbState,'state-ready','Finaliza aunque TTS no emita eventos');
+replies.push({actions:[{action:'addAttributes',name:'Usuario',attributes:[{name:'correo',type:'String'}]}]});await run('agregale correo');assert.equal(diagram().classes[0].attributes.length,4);assert(requests[1].history[1].text.includes('Usuario'));
+const before=diagram();replies.push({actions:[{action:'createClass',name:'Temporal',attributes:[]},{action:'addAttributes',name:'NoExiste',attributes:[{name:'x',type:'String'}]}]});await run('cambio múltiple');assert.deepEqual(diagram(),before);assert(spoken.at(-1).startsWith('No apliqué'));
+vm.runInContext("collaborationState.role='viewer'",ctx);replies.push({actions:[{action:'deleteClass',name:'Usuario'}]});await run('elimina Usuario');assert.deepEqual(diagram(),before);
+ctx.navigator={onLine:false};ctx.UMLCommands=require('../frontend/js/uml-commands.js');
+ctx.Event=function(){};ctx.reviewMobileCommand=()=>{};
+const input={value:'',dispatchEvent(){},closest(){return {hidden:true}},scrollIntoView(){}};
+ctx.document.getElementById=id=>id==='siriOrb'?orb:id==='mobileCommand'?input:null;
+const requestCount=requests.length;
+await run('Agrega atributo correo de tipo texto a clase Usuario');
+assert.equal(requests.length,requestCount,'Offline no consulta el servidor');
+assert.equal(input.value,'Agrega atributo correo de tipo texto a clase Usuario');
+assert.deepEqual(diagram(),before,'La propuesta local no se aplica automáticamente');
+assert.equal(orbState,'state-ready');
+console.log('Asistente: creación, contexto, confirmación real, reversión y solo lectura correctos.');
+})().catch(e=>{console.error(e);process.exit(1)});

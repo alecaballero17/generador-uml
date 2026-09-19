@@ -110,7 +110,9 @@ async function initWebSocket() {
             if (saved) { collaborationState.base=saved.base; collaborationState.revision=saved.revision; }
             if (!collaborationState.token) {
                 if (new URLSearchParams(location.search).has('project')) throw new Error('Falta el enlace de acceso');
-                const result=await fetch('/api/collaboration/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diagram:state.model.toJSON()})});
+                const isMobile = (location.host === 'appassets.androidplatform.net' || location.protocol === 'file:');
+                const apiOrigin = isMobile ? 'http://127.0.0.1:8000' : '';
+                const result=await fetch(`${apiOrigin}/api/collaboration/projects`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diagram:state.model.toJSON()})});
                 if (!result.ok) throw new Error('Servidor no disponible');
                 const data=await result.json();
                 state.projectId=data.projectId; collaborationState.token=data.token;
@@ -120,8 +122,10 @@ async function initWebSocket() {
             history.replaceState(null,'',url);
         }
         collaborationState.ready=true;
-        const protocol=location.protocol==='https:'?'wss:':'ws:';
-        state.ws=new WebSocket(`${protocol}//${location.host}/ws/collaboration/${encodeURIComponent(state.projectId)}`);
+        const isMobile = (location.host === 'appassets.androidplatform.net' || location.protocol === 'file:');
+        const wsHost = isMobile ? '127.0.0.1:8000' : location.host;
+        const protocol = (location.protocol === 'https:' && !isMobile) ? 'wss:' : 'ws:';
+        state.ws=new WebSocket(`${protocol}//${wsHost}/ws/collaboration/${encodeURIComponent(state.projectId)}`);
         state.ws.onopen=()=>state.ws.send(JSON.stringify({token:collaborationState.token}));
         state.ws.onmessage=event=>{
             const msg=JSON.parse(event.data);

@@ -57,20 +57,29 @@ async function transcribeLocalFile(file,language='spanish') {
         }
 
         const commandInput=document.getElementById('mobileCommand');
-        commandInput.value=result.text;
-        commandInput.dispatchEvent(new Event('input',{bubbles:true}));
+        if (commandInput) {
+            commandInput.value=result.text;
+            commandInput.dispatchEvent(new Event('input',{bubbles:true}));
+        }
         if(typeof reviewMobileCommand==='function') {
             reviewMobileCommand();
         }
-        aiStatus(`Transcripción: "${result.text}". Revisa la propuesta y pulsa Aplicar al diagrama.`);
+        aiStatus(`Transcripción: "${result.text}".`);
+        window.dispatchEvent(new CustomEvent('voice-transcription-done', { detail: { text: result.text } }));
     } finally {await context.close();}
 }
 async function toggleLocalRecording(forPhoto = false) {
     const button=forPhoto ? document.getElementById('btnVoiceSupplementPhoto') : document.getElementById('mobileMic');
-    if(localAI.recorder?.state==='recording') {localAI.recorder.stop();return;}
+    if(localAI.recorder?.state==='recording') {
+        localAI.recorder.stop();
+        window.dispatchEvent(new CustomEvent('voice-recording-stopped'));
+        return;
+    }
     localAI.photoTarget = !!forPhoto;
     try {
-        aiStatus('Preparando el motor antes de grabar…');if(button)button.disabled=true;
+        aiStatus('Preparando el motor antes de grabar…');
+        if(button)button.disabled=true;
+        window.dispatchEvent(new CustomEvent('voice-recording-preparing'));
         await runLocalVoice({type:'prepare'});
         try {
             localAI.stream=await navigator.mediaDevices.getUserMedia({
@@ -88,11 +97,22 @@ async function toggleLocalRecording(forPhoto = false) {
                 button.textContent=forPhoto ? '🎙️ Dictar corrección o atributo' : 'Dictar diagrama';
                 button.disabled=true;
             }
+            window.dispatchEvent(new CustomEvent('voice-recording-stopped'));
             aiStatus('Grabación terminada. Transcribiendo en este dispositivo…');
-            clearTimeout(localAI.timer);localAI.stream?.getTracks().forEach(track=>track.stop());
-            try {await transcribeLocalFile(new Blob(localAI.chunks,{type:localAI.recorder.mimeType}));}catch(e){aiStatus(e.message);}finally{if(button)button.disabled=false;}
+            window.dispatchEvent(new CustomEvent('voice-transcribing'));
+            clearTimeout(localAI.timer);
+            localAI.stream?.getTracks().forEach(track=>track.stop());
+            try {
+                await transcribeLocalFile(new Blob(localAI.chunks,{type:localAI.recorder.mimeType}));
+            } catch(e) {
+                aiStatus(e.message);
+                window.dispatchEvent(new CustomEvent('voice-recording-error', { detail: { error: e.message } }));
+            } finally {
+                if(button)button.disabled=false;
+            }
         };
         localAI.recorder.start();
+        window.dispatchEvent(new CustomEvent('voice-recording-started', { detail: { stream: localAI.stream } }));
         if(button) {
             button.classList.add('is-recording');
             button.textContent='● Escuchando — Detener';
@@ -100,7 +120,12 @@ async function toggleLocalRecording(forPhoto = false) {
         }
         aiStatus(forPhoto ? 'Grabando corrección para la foto… Di el nombre de clase o atributos.' : 'Grabando comando de diagrama…');
         localAI.timer=setTimeout(()=>{if(localAI.recorder?.state==='recording')localAI.recorder.stop();},30000);
-    } catch(error) {localAI.stream?.getTracks().forEach(track=>track.stop());aiStatus('Error de micrófono: '+(error.message||error.name));if(button)button.disabled=false;}
+    } catch(error) {
+        localAI.stream?.getTracks().forEach(track=>track.stop());
+        aiStatus('Error de micrófono: '+(error.message||error.name));
+        window.dispatchEvent(new CustomEvent('voice-recording-error', { detail: { error: (error.message||error.name) } }));
+        if(button)button.disabled=false;
+    }
 }
 async function prepareOffline() {
     const button=document.getElementById('prepareOffline');button.disabled=true;
