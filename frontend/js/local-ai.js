@@ -144,6 +144,70 @@ async function prepareOffline() {
         aiStatus('Archivos y motor de voz preparados. El navegador puede borrar almacenamiento si falta espacio.');
     } catch(error) {aiStatus(error.message);} finally {button.disabled=false;}
 }
+// Detect closed, axis-aligned UML compartments before OCR. No colour assumption.
+function detectPhotoBoxes(image) {
+    const {width:w,height:h,data}=image;
+    const dark=(x,y)=>{const i=(y*w+x)*4;return data[i]+data[i+1]+data[i+2]<330;};
+    const groups=[];
+    for(let y=0;y<h;y++) {
+        let start=-1;
+        for(let x=0;x<=w;x++) {
+            if(x<w&&dark(x,y)){if(start<0)start=x;continue;}
+            if(start>=0&&x-start>=Math.max(55,w*.045)) {
+                let group=groups.find(g=>Math.abs(g.x-start)<=5&&Math.abs(g.right-x)<=5);
+                if(!group){group={x:start,right:x,rows:[]};groups.push(group);}
+                const last=group.rows[group.rows.length-1];
+                if(last!==undefined&&y-last<5)group.rows[group.rows.length-1]=y;
+                else group.rows.push(y);
+            }
+            start=-1;
+        }
+    }
+    const boxes=[];
+    for(const g of groups) {
+        if(g.rows.length<3)continue;
+        const top=g.rows[0],bottom=g.rows[g.rows.length-1];
+        if(bottom-top<35)continue;
+        const vertical=x=>{let hits=0;for(let y=top;y<=bottom;y++){let found=false;for(let dx=-4;dx<=4;dx++)if(x+dx>=0&&x+dx<w&&dark(x+dx,y))found=true;if(found)hits++;}return hits/(bottom-top+1);};
+        if(vertical(g.x)<.85||vertical(g.right-1)<.85)continue;
+        boxes.push({x:g.x+5,y:top+5,width:g.right-g.x-10,height:bottom-top-10,headerBottom:g.rows[1]-4,attributesBottom:g.rows[2]-4});
+    }
+    return boxes.sort((a,b)=>a.y-b.y||a.x-b.x);
+}
+// Candidate connections only: crossings and arrow semantics require review.
+function detectPhotoConnections(image, boxes) {
+    const {width:w,height:h,data}=image, mask=new Uint8Array(w*h);
+    for(let i=0;i<mask.length;i++)mask[i]=data[i*4]+data[i*4+1]+data[i*4+2]<390?1:0;
+    for(const b of boxes)for(let y=Math.max(0,b.y-8);y<Math.min(h,b.y+b.height+9);y++)
+        mask.fill(0,y*w+Math.max(0,b.x-8),y*w+Math.min(w,b.x+b.width+9));
+    const connections=[],ambiguous=[];
+    const queue=new Int32Array(w*h);
+    for(let seed=0;seed<mask.length;seed++) {
+        if(!mask[seed])continue;
+        let head=0,tail=1;queue[0]=seed;mask[seed]=0;
+        const touched=new Set();
+        while(head<tail){const pos=queue[head++],x=pos%w,y=Math.floor(pos/w);
+            boxes.forEach((b,i)=>{if(x>=b.x-13&&x<=b.x+b.width+13&&y>=b.y-13&&y<=b.y+b.height+13)touched.add(i);});
+            for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+                const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=w||ny>=h)continue;
+                const next=ny*w+nx;if(mask[next]){mask[next]=0;queue[tail++]=next;}
+            }
+        }
+        if(tail<25||touched.size<2)continue;
+        const indices=[...touched].sort((a,b)=>a-b);
+        const target=indices.length===2?connections:ambiguous;
+        if(!target.some(item=>item.join(',')===indices.join(',')))target.push(indices);
+    }
+    return {connections,ambiguous};
+}
+async function photoCanvas(file) {
+    const bitmap=await createImageBitmap(file);
+    const canvas=document.createElement('canvas');
+    const scale=Math.min(1,1800/Math.max(bitmap.width,bitmap.height));
+    canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
+    canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
+    return canvas;
+}
 async function recognizeLocalPhoto(file) {
     const statusEl = document.getElementById('mobilePhotoStatus');
     const progBar = document.getElementById('mobilePhotoProgressBar');
@@ -175,7 +239,7 @@ async function recognizeLocalPhoto(file) {
         workerPath:'/assets/vendor/worker.min.js',
         corePath:'/assets/vendor/',
         langPath:'/assets/vendor/',
-        gzip: false,
+        gzip: true,
         logger:m=>{
             if(m.status) {
                 const pct = Math.round((m.progress||0)*100);
@@ -184,10 +248,33 @@ async function recognizeLocalPhoto(file) {
         }
     });
     try {
-        update('Reconociendo texto en la imagen…', 75);
-        const result=await worker.recognize(file);
-        update('¡Texto reconocido con éxito!', 100);
-        return result.data.text;
+        const canvas=await photoCanvas(file);
+        const boxes=detectPhotoBoxes(canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height));
+        if(!boxes.length) {
+            const result=await worker.recognize(canvas);
+            return {text:result.data.text,structured:false,count:0};
+        }
+        await worker.setParameters({tessedit_pageseg_mode:'6'});
+        const blocks=[], names=[];
+        const read=async(box,top,bottom)=>{
+            const crop=document.createElement('canvas');crop.width=box.width*3;crop.height=Math.max(1,bottom-top)*3;
+            const ctx=crop.getContext('2d');ctx.drawImage(canvas,box.x,top,box.width,Math.max(1,bottom-top),0,0,crop.width,crop.height);
+            const pixels=ctx.getImageData(0,0,crop.width,crop.height);
+            for(let i=0;i<pixels.data.length;i+=4){const v=pixels.data[i]+pixels.data[i+1]+pixels.data[i+2]<420?0:255;pixels.data[i]=pixels.data[i+1]=pixels.data[i+2]=v;}
+            ctx.putImageData(pixels,0,0);
+            return (await worker.recognize(crop)).data.text.trim();
+        };
+        for(let i=0;i<boxes.length;i++) {
+            update(`Leyendo clase ${i+1} de ${boxes.length}…`,25+70*i/boxes.length);
+            const box=boxes[i];
+            const name=await read(box,box.y,box.headerBottom);
+            const attrs=await read(box,box.headerBottom+9,box.attributesBottom);
+            const methods=box.y+box.height>box.attributesBottom+10 ? await read(box,box.attributesBottom+9,box.y+box.height) : '';
+            names.push(name.replace(/\n/g,' ').trim());
+            if(name)blocks.push(name.replace(/\n/g,' ')+'\n'+(attrs+'\n'+methods).split('\n').map(line=>line.trim()).filter(Boolean).join('\n'));
+        }
+        update('Lectura terminada; revisa las clases antes de importar.',100);
+        return {text:blocks.join('\n\n'),structured:true,count:blocks.length,names,...detectPhotoConnections(canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height),boxes)};
     } finally {
         await worker.terminate();
     }

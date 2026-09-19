@@ -7,6 +7,13 @@ import android.net.Uri;
 import android.util.Log;
 import android.webkit.*;
 import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+import androidx.webkit.JavaScriptReplyProxy;
+import org.json.JSONObject;
+import android.util.Base64;
+import java.util.Collections;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -16,6 +23,12 @@ public class MainActivity extends Activity {
     private WebView web;
     private PermissionRequest pendingPermissionReq;
     private ValueCallback<Uri[]> files;
+    private byte[] exportBytes;
+    private JavaScriptReplyProxy exportReply;
+    private void finishExport(String status) {
+        if(exportReply!=null)exportReply.postMessage(status);
+        exportReply=null;exportBytes=null;
+    }
 
     private boolean local(Uri uri) {
         return uri != null && "https".equals(uri.getScheme()) && "appassets.androidplatform.net".equals(uri.getHost());
@@ -125,6 +138,27 @@ public class MainActivity extends Activity {
             }
         });
 
+        if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(web,"UMLFiles",Collections.singleton("https://appassets.androidplatform.net"),
+                (view,message,origin,mainFrame,reply)->{
+                    if(!mainFrame||!local(origin))return;
+                    if(exportReply!=null){reply.postMessage("busy");return;}
+                    try {
+                        String raw=message.getData();
+                        if(raw==null||raw.length()>45000000){reply.postMessage("too-large");return;}
+                        JSONObject request=new JSONObject(raw);
+                        byte[] bytes=Base64.decode(request.getString("data"),Base64.DEFAULT);
+                        if(bytes.length>32*1024*1024){reply.postMessage("too-large");return;}
+                        String name=request.getString("name").replaceAll("[\\/:*?<>|]","_");
+                        String mime=request.optString("type","application/octet-stream");
+                        exportBytes=bytes;exportReply=reply;
+                        Intent save=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                        save.addCategory(Intent.CATEGORY_OPENABLE);save.setType(mime);
+                        save.putExtra(Intent.EXTRA_TITLE,name);
+                        startActivityForResult(save,43);
+                    } catch(Exception error){if(exportReply!=null)finishExport("error");else reply.postMessage("error");}
+                });
+        }
         web.loadUrl("https://appassets.androidplatform.net/index.html?view=mobile");
     }
 
@@ -155,6 +189,19 @@ public class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if(request==43 && exportReply!=null) {
+            if(result!=RESULT_OK||data==null||data.getData()==null){finishExport("cancelled");return;}
+            final Uri destination=data.getData();final byte[] bytes=exportBytes;
+            new Thread(()->{
+                String status="saved";
+                try(OutputStream output=getContentResolver().openOutputStream(destination,"w")) {
+                    if(output==null)throw new java.io.IOException();
+                    output.write(bytes);
+                }catch(Exception error){status="error";}
+                final String outcome=status;runOnUiThread(()->finishExport(outcome));
+            }).start();
+            return;
+        }
         if (request == 42 && files != null) {
             files.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result, data));
             files = null;

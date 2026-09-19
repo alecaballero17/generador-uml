@@ -95,8 +95,8 @@ class ProjectSaveRequest(BaseModel):
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+    """Health check endpoint (used by mobile and web to verify connectivity)."""
+    return {"status": "ok", "service": "GeneradorUML", "timestamp": datetime.now().isoformat()}
 
 
 # ─── Diagram Validation ───────────────────────────────────────────────────
@@ -498,11 +498,6 @@ class AssistantConverseRequest(BaseModel):
     message: str
     diagram: Optional[dict] = None
     history: Optional[list] = None
-
-@app.get("/api/health")
-async def health_check():
-    """Health check para validar conectividad entre móvil y backend."""
-    return {"status": "ok", "service": "GeneradorUML"}
 
 @app.post("/api/assistant/converse")
 async def assistant_converse(req: AssistantConverseRequest):

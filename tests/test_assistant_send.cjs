@@ -1,0 +1,12 @@
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('frontend/js/mobile.js','utf8');
+const start=source.indexOf("    const siriTextInput =");
+const end=source.indexOf('    const btnQuickPhoto',start);
+let busy=false;const sent=[];const input={value:'Agrega atributo correo de tipo texto a clase Usuario'},button={};
+const ctx={document:{getElementById:id=>id==='siriTextInput'?input:button},window:{},send:msg=>sent.push(msg),busy:()=>busy};
+vm.createContext(ctx);
+vm.runInContext('const ConversationalAssistant={isBusy:busy,processMessage:send,updateOrbState(){}};',ctx);
+vm.runInContext(source.slice(start,end),ctx);
+button.onclick();assert.equal(sent.length,1);assert.equal(input.value,'');
+busy=true;input.value='Segundo pedido';button.onclick();assert.equal(sent.length,1);assert.equal(input.value,'Segundo pedido');
+console.log('Botón enviar: invoca el asistente y conserva texto mientras está ocupado.');

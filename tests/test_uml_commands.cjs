@@ -12,7 +12,15 @@ assert.equal(parser.parse('crea clase Usuario con atributo id de tipo id').attri
 assert.equal(parser.attributes('código: texto, precio: decimal')[0].name,'codigo');
 assert.equal(parser.attributes('código: texto, precio: decimal')[1].name,'precio');
 
-console.log('Comandos UML: 11 verificaciones correctas');
+
 
 assert.throws(()=>parser.parse('Creo una clase usuario con híde nombre y teléfono.'));
 assert.throws(()=>parser.parse('Crea una clase Usuario con id, nombre y telefono'));
+
+assert.deepEqual(parser.parse('Agregá el atributo correo a la clase Usuario'),{action:'addAttributes',name:'Usuario',attributes:[{name:'correo',type:'String'}]});
+assert.deepEqual(parser.parse('A la clase Usuario agregale el atributo dirección'),{action:'addAttributes',name:'Usuario',attributes:[{name:'direccion',type:'String'}]});
+assert.deepEqual(parser.parse('Clase Usuario, agregale el atributo apellido'),{action:'addAttributes',name:'Usuario',attributes:[{name:'apellido',type:'String'}]});
+assert.equal(parser.attributes('apellido')[0].type,'String');
+assert.equal(parser.attributes('id')[0].type,'Long');
+assert.throws(()=>parser.parse('agregale correo'));
+console.log('Comandos UML: todas las verificaciones pasaron.');

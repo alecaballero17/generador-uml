@@ -405,16 +405,9 @@ class OfflineCacheService {
 
     def _generate_main(self) -> str:
         title = self.diagram.name or "GeneradorUML App"
-        imports = []
-        for cls in self.entities:
-            snake = self._to_snake_case(cls.name)
-            imports.append(f"import 'screens/{snake}/{snake}_list_screen.dart';")
-        imports_str = "\n".join(imports)
 
         return f"""import 'package:flutter/material.dart';
 import 'screens/dashboard_screen.dart';
-import 'screens/assistant_screen.dart';
-{imports_str}
 
 void main() {{
   runApp(const UMLGeneratedApp());
@@ -966,8 +959,10 @@ class _AssistantScreenState extends State<AssistantScreen> {{
         }}
       }},
       localeId: 'es_ES',
-      listenMode: stt.ListenMode.confirmation,
-      cancelOnError: true,
+      listenOptions: stt.SpeechListenOptions(
+        listenMode: stt.ListenMode.confirmation,
+        cancelOnError: true,
+      ),
       listenFor: const Duration(seconds: 15),
       pauseFor: const Duration(seconds: 3),
     );
@@ -1393,7 +1388,7 @@ class _{cls.name}ListScreenState extends State<{cls.name}ListScreen> {{
         _filteredItems = _items;
       }} else {{
         _filteredItems = _items.where((item) {{
-          final text = item.{display_attr.name}?.toString().toLowerCase() ?? '';
+          final text = (item.{display_attr.name} == null ? '' : '${{item.{display_attr.name}}}').toLowerCase();
           return text.contains(query);
         }}).toList();
       }}
@@ -1584,7 +1579,7 @@ class _{cls.name}ListScreenState extends State<{cls.name}ListScreen> {{
               ),
             ),
             title: Text(
-              item.{display_attr.name}?.toString() ?? 'Sin {display_attr.name}',
+              item.{display_attr.name} == null ? 'Sin {display_attr.name}' : '${{item.{display_attr.name}}}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             {subtitle_code}
@@ -1639,7 +1634,7 @@ class _{cls.name}ListScreenState extends State<{cls.name}ListScreen> {{
             fields_widgets.append(f"""
             _DetailTile(
               label: '{attr.name.capitalize()}',
-              value: item.{attr.name}?.toString() ?? 'No especificado',
+              value: item.{attr.name} == null ? 'No especificado' : '${{item.{attr.name}}}',
               icon: Icons.label_outline,
             ),""")
         fields_str = "\n".join(fields_widgets)
@@ -1743,7 +1738,7 @@ class _{cls.name}DetailScreenState extends State<{cls.name}DetailScreen> {{
                       const SizedBox(width: 12),
                       Text(
                         'Detalles del Registro',
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                        style: (theme.textTheme.titleMedium ?? const TextStyle()).copyWith(fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -1840,8 +1835,10 @@ class _DetailTile extends StatelessWidget {{
               const SizedBox(height: 12),""")
                 model_construction_fields.append(f"        {attr.name}: _{attr.name},")
             else:
-                controllers_decl.append(f"  final TextEditingController {c_name} = TextEditingController();")
-                controllers_init.append(f"    {c_name}.text = widget.item?.{attr.name}?.join(',') ?? '';" if dtype == "List<int>" else f"    {c_name}.text = widget.item?.{attr.name}?.toString() ?? '';")
+                if dtype == "List<int>":
+                    controllers_init.append(f"    {c_name}.text = (widget.item != null && widget.item!.{attr.name} != null) ? widget.item!.{attr.name}!.join(',') : '';")
+                else:
+                    controllers_init.append(f"    {c_name}.text = (widget.item != null && widget.item!.{attr.name} != null) ? '${{widget.item!.{attr.name}}}' : '';")
 
                 kb_type = "TextInputType.text"
                 if dtype in ("int", "double"):
@@ -1889,10 +1886,11 @@ class _DetailTile extends StatelessWidget {{
         controllers_init_str = "\n".join(controllers_init)
         form_fields_str = "\n".join(form_fields_widgets)
         model_construction_str = "\n".join(model_construction_fields)
+        has_date = any(self._dart_type(a.type) == "DateTime" for a in cls.attributes)
+        intl_import = "import 'package:intl/intl.dart';\n" if has_date else ""
 
         return f"""import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import '../../models/{snake}.dart';
+{intl_import}import '../../models/{snake}.dart';
 import '../../services/{snake}_service.dart';
 
 /// Formulario para crear o editar registros de {cls.name} con validaciones completas.

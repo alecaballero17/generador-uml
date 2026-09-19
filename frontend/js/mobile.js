@@ -13,8 +13,9 @@ function applyUMLPlan(plan) {
     } else {
         const cls = existing || new UMLClassNode(plan.name, 60 + state.model.classes.length * 240, 100);
         for (const attr of plan.attributes) {
-            cls.addAttribute({ ...attr, id: crypto.randomUUID(), visibility: '-', constraints: [] });
+            cls.addAttribute({ ...attr, id: crypto.randomUUID(), visibility: ['+', '-', '#', '~'].includes(attr.visibility) ? attr.visibility : '-', constraints: [] });
         }
+        for (const operation of plan.operations || []) cls.addOperation({...operation, id:crypto.randomUUID()});
         if (!existing) state.model.addClass(cls);
         state.selectedId = cls.id;
         state.selectedType = 'class';
@@ -177,7 +178,12 @@ function refreshMobileCards() {
         addAttrBtn.innerHTML = `<span>+</span> Agregar Atributo`;
         addAttrBtn.onclick = () => openMobileForm(cls.name);
 
-        card.append(header, attrsList, addAttrBtn);
+        const operationsList = document.createElement('div');
+        for (const operation of cls.operations || []) {
+            const row=document.createElement('p');row.textContent=`${operation.visibility || '+'} ${operation.name}() : ${operation.returnType || 'void'}`;
+            operationsList.append(row);
+        }
+        card.append(header, attrsList, operationsList, addAttrBtn);
         container.append(card);
     }
 }
@@ -187,7 +193,7 @@ function reviewPhotoText(text) {
                     .replace(/\bcod1go\b/gi, 'codigo')
                     .replace(/\bc0digo\b/gi, 'codigo');
     return clean.trim().split(/\n\s*\n/).filter(Boolean).map(block => {
-        const lines = block.split('\n').map(s => s.trim().replace(/^[+\-#~|│┌┐└┘├┤─]\s*/, '')).filter(Boolean);
+        const lines = block.split('\n').map(s => s.trim().replace(/^[|│┌┐└┘├┤─]\s*/, '')).filter(Boolean);
         if (!lines.length) return null;
         if (lines.length === 1 && (/^(ejemplo|diagrama|clases|modelo)\b/i.test(lines[0]) || !lines[0].includes(':'))) {
             return null;
@@ -195,12 +201,17 @@ function reviewPhotoText(text) {
         try {
             const name = UMLCommands.identifier(lines.shift(), true);
             const attributes = lines.filter(line => !line.includes('(')).map(line => {
-                try { return UMLCommands.attributes(line)[0]; } catch (e) { return null; }
+                try { const visibility = /^[+\-#~]/.test(line) ? line[0] : '-'; const attribute = UMLCommands.attributes(line.replace(/^[+\-#~]\s*/, ''))[0]; return attribute ? {...attribute, visibility} : null; } catch (e) { return null; }
             }).filter(Boolean);
             if (!attributes.length && /^(ejemplo|diagrama)/i.test(name)) return null;
-            return { action: 'createClass', name, attributes };
+            const operations = lines.filter(line => line.includes('(')).map(line => {
+                const match = line.match(/^([+\-#~])?\s*([\p{L}_][\p{L}\p{N}_ ]*)\(\s*\)\s*(?::\s*([\w]+))?$/u);
+                if (!match) throw new Error('Revisa la firma del método: ' + line);
+                return {name:UMLCommands.identifier(match[2]),visibility:match[1] || '+',parameters:[],returnType:match[3] || 'void',isAbstract:false,isStatic:false,isConstructor:false};
+            });
+            return { action: 'createClass', name, attributes, operations };
         } catch (e) {
-            return null;
+            throw new Error("No se puede importar este bloque: " + e.message);
         }
     }).filter(Boolean);
 }
@@ -235,6 +246,11 @@ function openMobileForm(className = null) {
 }
 
 function initMobileEditor() {
+    const relationButton=document.createElement('button');
+    relationButton.textContent='Conectar clases';relationButton.className='btn-secondary';
+    relationButton.onclick=openMobileRelationship;
+    document.getElementById('mobileClasses').before(relationButton);
+
     const forced = new URLSearchParams(location.search).get('view') === 'mobile';
     if (forced || matchMedia('(max-width: 760px)').matches) {
         document.body.classList.add('mobile-editor');
@@ -299,9 +315,9 @@ function initMobileEditor() {
         if (!siriTextInput || !siriTextInput.value.trim()) return;
         if(typeof ConversationalAssistant!=='undefined' && ConversationalAssistant.isBusy()){ConversationalAssistant.updateOrbState('thinking','Estoy procesando el pedido anterior. Tu texto no se borró.');return;}
         const msg = siriTextInput.value.trim();
-        siriTextInput.value = '';
-        if (window.ConversationalAssistant) {
+        if (typeof ConversationalAssistant !== 'undefined') {
             ConversationalAssistant.processMessage(msg);
+            siriTextInput.value = '';
         }
     };
     if (btnSiriSendText) btnSiriSendText.onclick = sendSiriText;
@@ -401,9 +417,10 @@ function initMobileEditor() {
         if (status) status.textContent = 'Cargando y analizando imagen localmente…';
         try {
             const rawText = await recognizeLocalPhoto(file);
-            $('#mobilePhotoText').value = rawText;
+            $('#mobilePhotoText').value = rawText.text;
+            renderPhotoConnections(rawText);
             $('#mobilePhotoReview').hidden = false;
-            if (status) status.textContent = '¡Texto detectado! Puedes editarlo o complementar con voz antes de importar.';
+            if (status) status.textContent = rawText.structured ? `Se separaron ${rawText.count} clases para revisar. Los tipos no indicados se importan como texto. Revisa también los métodos. Las relaciones todavía deben añadirse manualmente.` : 'No se pudieron separar las clases. El texto es una lectura sin verificar: corrígelo antes de importar.';
         } catch (e) {
             if (status) status.textContent = 'Error al leer imagen: ' + e.message;
             aiStatus(e.message);
@@ -470,3 +487,62 @@ function initMobileEditor() {
 }
 
 initMobileEditor();
+
+function openMobileRelationship(candidate = null) {
+    if(collaborationState.role==='viewer'){showToast('Este proyecto es de solo lectura','warning');return;}
+    if(!state.model.classes.length){showToast('Crea primero una clase','info');return;}
+    const dialog=document.createElement('dialog');
+    dialog.innerHTML=`<form><h2>Conectar clases</h2><p>En herencia, el origen es la clase hija y el destino es la clase padre.</p>
+    <label>Clase de origen<select name="source"></select></label>
+    <label>Clase de destino<select name="target"></select></label>
+    <label>Relación<select name="type"><option value="association">Asociación</option><option value="generalization">Herencia</option><option value="aggregation">Agregación</option><option value="composition">Composición</option><option value="dependency">Dependencia</option><option value="realization">Implementa interfaz</option></select></label>
+    <label>Multiplicidad de origen<select name="sourceMult"><option>1</option><option>0..1</option><option>0..*</option><option>1..*</option></select></label>
+    <label>Multiplicidad de destino<select name="targetMult"><option>0..*</option><option>1</option><option>0..1</option><option>1..*</option></select></label>
+    <p role="alert"></p><button type="button">Cancelar</button><button type="submit" class="btn-primary">Guardar relación</button></form>`;
+    const form=dialog.querySelector('form');
+    for(const cls of state.model.classes)for(const name of ['source','target']){
+        const option=document.createElement('option');option.value=cls.id;option.textContent=cls.name;form.elements[name].append(option);
+    }
+    if(state.model.classes.length>1)form.elements.target.selectedIndex=1;
+    if(candidate?.source && candidate?.target){form.elements.source.value=candidate.source;form.elements.target.value=candidate.target;}
+    const updateMultiplicity=()=>{const enabled=['association','aggregation','composition'].includes(form.elements.type.value);form.elements.sourceMult.disabled=!enabled;form.elements.targetMult.disabled=!enabled;};
+    form.elements.type.onchange=updateMultiplicity;updateMultiplicity();
+    dialog.querySelector('button[type=button]').onclick=()=>{dialog.close();dialog.remove();};
+    form.onsubmit=event=>{
+        event.preventDefault();
+        try {
+            const source=form.elements.source.value,target=form.elements.target.value,type=form.elements.type.value;
+            if(collaborationState.role==='viewer')throw new Error('Este proyecto es de solo lectura');
+            if(!state.model.getClass(source)||!state.model.getClass(target))throw new Error('Una clase fue eliminada. Abre el formulario otra vez.');
+            if(type==='generalization'){
+                const visited=new Set();
+                const reachesSource=id=>{if(id===source)return true;if(visited.has(id))return false;visited.add(id);return state.model.relationships.filter(r=>r.type==='generalization'&&r.source.classId===id).some(r=>reachesSource(r.target.classId));};
+                if(reachesSource(target))throw new Error('Esta herencia crearía un ciclo.');
+            }
+            if(type==='realization'&&!state.model.getClass(target).isInterface)throw new Error('El destino debe ser una interfaz.');
+            if(state.model.relationships.some(r=>r.type===type&&r.source.classId===source&&r.target.classId===target))throw new Error('Esta relación ya existe.');
+            saveUndo();const relation=new UMLRelNode(type,source,target);
+            relation.source.multiplicity=form.elements.sourceMult.value;relation.target.multiplicity=form.elements.targetMult.value;
+            state.model.addRelationship(relation);renderAll();persistCollaboration();broadcastChange();refreshMobileCards();
+            showToast('Relación guardada en el diagrama','success');dialog.close();dialog.remove();
+        }catch(error){dialog.querySelector('[role=alert]').textContent=error.message;}
+    };
+    document.body.append(dialog);dialog.showModal();
+}
+
+function renderPhotoConnections(result, container = null) {
+    document.getElementById('photoConnectionsReview')?.remove();
+    if(!result.connections?.length&&!result.ambiguous?.length)return;
+    const section=document.createElement('section');section.id='photoConnectionsReview';
+    const title=document.createElement('h3');title.textContent='Conexiones de la foto: revisar';section.append(title);
+    const note=document.createElement('p');note.textContent='Son propuestas. Confirma el tipo, la dirección y las multiplicidades mirando la foto. No se agregan automáticamente.';section.append(note);
+    const find=index=>{const name=UMLCommands.identifier(result.names[index],true);return state.model.classes.find(c=>c.name.toLowerCase()===name.toLowerCase());};
+    for(const pair of result.connections||[]){
+        const button=document.createElement('button');button.type='button';button.textContent=pair.map(i=>result.names[i]).join(' ↔ ');button.className='btn';
+        button.onclick=()=>{try{const source=find(pair[0]),target=find(pair[1]);if(!source||!target)throw new Error('Importa primero las clases o comprueba sus nombres.');openMobileRelationship({source:source.id,target:target.id});}catch(error){note.textContent=error.message;}};
+        section.append(button);
+    }
+    const manual=document.createElement('button');manual.type='button';manual.className='btn';manual.textContent='Conectar clases manualmente';manual.onclick=()=>openMobileRelationship();section.append(manual);
+    for(const group of result.ambiguous||[]){const text=document.createElement('p');text.textContent='Cruce o ramificación por resolver: '+group.map(i=>result.names[i]).join(', ')+'. Usa Conectar clases para indicar cada relación.';section.append(text);}
+    (container || document.getElementById('mobilePhotoReview')).append(section);
+}

@@ -39,7 +39,7 @@
                 if(match) { typeKey=match[1].toLowerCase(); rawName=null; }
                 else { rawName=part.trim(); typeKey=null; }
             }
-            let type=typeKey&&types[typeKey]?types[typeKey]:(part.toLowerCase().includes('id')?'Long':'String');
+            let type=typeKey&&types[typeKey]?types[typeKey]:(/^(?:id|identificador)$/i.test(part.trim())?'Long':'String');
             if(!rawName) {
                 if(!match&&!types[part.trim().toLowerCase()]) {
                     rawName=part.trim();
@@ -60,6 +60,9 @@
             .replace(/\b(?:una\s+)?gran\s+([a-zA-Z])/gi,'clase $1')
             .replace(/\b(?:i\s*de|i\s*d)\b/gi,'id')
             .replace(/\bde\s+tipo\s+ide\b/gi,'de tipo id');
+        // Explicit class reference also supports the natural class-first ordering.
+        const classFirst=clean.match(/^(?:a\s+)?(?:la\s+)?clase\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*,?\s+(?:agregale|agrega|anadele|anade)\s+(?:el\s+|los\s+)?atributos?\s+(.+)$/i);
+        if(classFirst)return {action:'addAttributes',name:identifier(classFirst[1],true),attributes:attributes(classFirst[2])};
         let match=clean.match(/^(?:por favor\s+)?(?:quiero\s+(?:crear|una)|necesito\s+(?:crear|una)|creo\s+que\s+es|crear|crea|creame|creo|agrega|agregar|haz|genera|generar|nueva)?\s*(?:una\s+|la\s+|el\s+)?clase\s+(?:llamada\s+)?(.+?)(?:\s+(?:que\s+tenga|con)\s+(?:los\s+|las\s+|el\s+|la\s+)?(?:atributos?|campos?|propiedades?)\s*(.*))?$/i);
         if(match) {
             if(/\b(?:con|tenga|atributos?|campos?)\b/i.test(match[1]))throw new Error('No pude separar el nombre de la clase de sus atributos. Usa: Usuario con atributos id, nombre y telefono.');

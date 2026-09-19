@@ -1,0 +1,11 @@
+const vm=require('vm'),fs=require('fs'),assert=require('node:assert/strict');
+const fields={};for(const id of ['cfgBackendUrl','cfgProjectLink','btnCancelCfg','btnApplyCfg'])fields['#'+id]={value:''};
+const dialog={querySelector:id=>fields[id],showModal(){},close(){},remove(){}};
+let saved=0,reloaded=0,target='',error='';const settings={};
+const ctx={URL,URLSearchParams,document:{createElement:()=>dialog,body:{append(){}}},umlBackendOrigin:()=> 'http://127.0.0.1:8000',location:{href:'https://appassets.androidplatform.net/index.html?view=mobile&project=old#access=oldtoken',reload(){reloaded++}},history:{replaceState(a,b,url){target=url}},localStorage:{setItem:(k,v)=>settings[k]=v},persistCollaboration(){saved++},showToast:msg=>error=msg};
+vm.createContext(ctx);const src=fs.readFileSync('frontend/js/collaboration.js','utf8');vm.runInContext(src.slice(src.indexOf('function showServerConnectionDialog()'),src.indexOf("document.addEventListener('DOMContentLoaded'")),ctx);
+vm.runInContext('showServerConnectionDialog()',ctx);
+fields['#cfgProjectLink'].value='http://127.0.0.1:8000/?project=joined#access=permission';fields['#btnApplyCfg'].onclick();
+assert.equal(new URL(target).searchParams.get('project'),'joined');assert.equal(new URL(target).hash,'#access=permission');assert.equal(saved,1);assert.equal(reloaded,1);
+fields['#cfgProjectLink'].value='just-a-room';fields['#btnApplyCfg'].onclick();assert.equal(reloaded,1);assert(error);
+console.log('Invitación: permiso preservado, borrador guardado y enlace incompleto rechazado.');

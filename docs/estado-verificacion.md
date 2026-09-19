@@ -51,3 +51,26 @@ guarda historial local. Aun falta probar ese flujo en navegador tras recompilar.
 - Documentacion y evidencias finales del Proceso Unificado.
 
 No aplicar el antiguo changes.json del informe: Antigravity cambio los archivos posteriormente.
+
+## Actualización 19 septiembre — revisión en curso
+
+Cambios verificados automáticamente:
+- XMI: herencia exportada/importada, relaciones antes de clases, paquetes anidados, multiplicidad y propiedades de atributos.
+- MDJ: relaciones con referencias adelantadas y recuperación de posiciones desde vistas.
+- 32 pruebas Python aprobadas. No implica compatibilidad completa comprobada en Enterprise Architect o StarUML.
+- Intérprete local: variantes con clase primero y corrección del tipo inferido de apellido.
+- Asistente: salida del estado ocupado, propuesta local sin aplicación automática, conservación de texto cuando hay pedido pendiente.
+- Rutas API compartidas en APK para colaboración, invitación, validación, importación/exportación y generación. Pruebas JS para destino Android/web/configuración aprobadas.
+
+Última APK en compilación para incluir rutas corregidas. Teléfono desconectado: no se ha instalado esta revisión ni comprobado sus flujos en el dispositivo.
+Pendientes principales: reconocimiento estructural de fotos, fiabilidad de transcripción, pruebas Android sin conexión y sincronización completas, intercambio externo, descarga de archivos desde WebView y configuración accesible del servidor.
+
+
+## Revisión posterior a los cambios de Antigravity
+
+- Se corrigió test_interop_samples: importaba un módulo inexistente y usaba incorrectamente los contratos de MDJ. Suite ejecutada: 35 pruebas Python pasan, dos advertencias de dependencias.
+- Pasan las pruebas JavaScript de comandos, envío, rutas API, asistente y unión por invitación.
+- Se corrigió el diálogo de conexión: conserva el token del enlace, guarda el borrador anterior y reinicia el contexto de sala; rechaza enlaces incompletos. Comprobado con prueba automatizada, pendiente repetición en Android.
+- La exportación nativa JSON sí se comprobó antes en el teléfono: selector Android y archivo de 2475 bytes con tres clases leído correctamente. No implica validación del ZIP.
+- El documento PUD está marcado como final, pero ese rótulo no constituye evidencia de cumplimiento; las fechas y afirmaciones de rendimiento requieren respaldo.
+- Continúan sin evidencia completa: interpretación estructural de pizarras, voz fiable sin conexión, compatibilidad en aplicaciones externas y flujo integral móvil/web.

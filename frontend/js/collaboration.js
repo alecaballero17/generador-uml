@@ -1,3 +1,12 @@
+// Shared endpoint for the packaged editor and the browser editor.
+function umlBackendOrigin() {
+    if(location.host!=='appassets.androidplatform.net' && location.protocol!=='file:')return location.origin;
+    const configured=localStorage.getItem('uml_backend_url')||'http://127.0.0.1:8000';
+    const url=new URL(configured);
+    if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw new Error('Dirección de servidor inválida');
+    return url.origin;
+}
+function umlApiFetch(path,options) {return fetch(new URL(path,umlBackendOrigin()).href,options);}
 /* Shared projects: persistent snapshots, capability links, field-level merge. */
 const collaborationClientId = sessionStorage.getItem('uml_client_id') || crypto.randomUUID();
 sessionStorage.setItem('uml_client_id', collaborationClientId);
@@ -111,7 +120,7 @@ async function initWebSocket() {
             if (!collaborationState.token) {
                 if (new URLSearchParams(location.search).has('project')) throw new Error('Falta el enlace de acceso');
                 const isMobile = (location.host === 'appassets.androidplatform.net' || location.protocol === 'file:');
-                const apiOrigin = isMobile ? 'http://127.0.0.1:8000' : '';
+                const apiOrigin = umlBackendOrigin();
                 const result=await fetch(`${apiOrigin}/api/collaboration/projects`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diagram:state.model.toJSON()})});
                 if (!result.ok) throw new Error('Servidor no disponible');
                 const data=await result.json();
@@ -123,8 +132,9 @@ async function initWebSocket() {
         }
         collaborationState.ready=true;
         const isMobile = (location.host === 'appassets.androidplatform.net' || location.protocol === 'file:');
-        const wsHost = isMobile ? '127.0.0.1:8000' : location.host;
-        const protocol = (location.protocol === 'https:' && !isMobile) ? 'wss:' : 'ws:';
+        const backendUrl = new URL(umlBackendOrigin());
+        const wsHost = backendUrl.host;
+        const protocol = backendUrl.protocol==='https:' ? 'wss:' : 'ws:';
         state.ws=new WebSocket(`${protocol}//${wsHost}/ws/collaboration/${encodeURIComponent(state.projectId)}`);
         state.ws.onopen=()=>state.ws.send(JSON.stringify({token:collaborationState.token}));
         state.ws.onmessage=event=>{
@@ -166,10 +176,65 @@ async function showShareDialog() {
     const output=document.createElement('input'); output.readOnly=true; output.style.width='100%'; output.setAttribute('aria-label','Enlace para compartir');
     const make=document.createElement('button'); make.textContent='Crear enlace'; make.className='btn-primary';
     make.onclick=async()=>{
-        const response=await fetch(`/api/collaboration/${state.projectId}/invite`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${collaborationState.token}`},body:JSON.stringify({role:select.value})});
+        const response=await umlApiFetch(`/api/collaboration/${state.projectId}/invite`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${collaborationState.token}`},body:JSON.stringify({role:select.value})});
         if (!response.ok) { showToast('No se pudo crear el enlace','error'); return; }
-        const invite=await response.json(); const url=new URL(location.href); url.hash=`access=${invite.token}`; output.value=url.href; output.select();
+        const invite=await response.json(); const url=new URL('/',umlBackendOrigin()); url.searchParams.set('project',state.projectId); url.hash=`access=${invite.token}`; output.value=url.href; output.select();
     };
     const close=document.createElement('button'); close.textContent='Cerrar'; close.onclick=()=>{dialog.close();dialog.remove();};
     dialog.append(heading,note,select,make,output,close); document.body.append(dialog); dialog.showModal();
 }
+
+function showServerConnectionDialog() {
+    const dialog = document.createElement('dialog');
+    const currentUrl = umlBackendOrigin();
+    dialog.innerHTML = `
+        <div style="padding:18px;max-width:380px;display:flex;flex-direction:column;gap:12px;color:#f8fafc;background:#1e293b;border-radius:12px;border:1px solid #334155;">
+            <h3 style="margin:0;font-size:16px;">Conexión y Sincronización</h3>
+            <p style="margin:0;font-size:12px;color:#94a3b8;">Configura el servidor o únete a un proyecto para sincronizar Web y Móvil en tiempo real:</p>
+            <label style="font-size:12px;font-weight:600;">Dirección Backend:</label>
+            <input id="cfgBackendUrl" style="padding:8px;border-radius:6px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:13px;">
+            <span style="font-size:11px;color:#64748b;">• USB / Emulador: http://127.0.0.1:8000<br>• Wi-Fi local: http://192.168.1.50:8000</span>
+            <label style="font-size:12px;font-weight:600;margin-top:4px;">Enlace o ID de Proyecto (Web):</label>
+            <input id="cfgProjectLink" placeholder="Pegar enlace de la Web (opcional)..." style="padding:8px;border-radius:6px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:13px;">
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">
+                <button id="btnCancelCfg" style="padding:6px 12px;border-radius:6px;border:1px solid #475569;background:transparent;color:#cbd5e1;cursor:pointer;">Cerrar</button>
+                <button id="btnApplyCfg" style="padding:6px 14px;border-radius:6px;border:none;background:#6366f1;color:#fff;font-weight:bold;cursor:pointer;">Conectar</button>
+            </div>
+        </div>
+    `;
+    document.body.append(dialog);
+    dialog.querySelector('#cfgBackendUrl').value=currentUrl;
+    dialog.showModal();
+    dialog.querySelector('#btnCancelCfg').onclick = () => { dialog.close(); dialog.remove(); };
+    dialog.querySelector('#btnApplyCfg').onclick = () => {
+        const url = dialog.querySelector('#cfgBackendUrl').value.trim();
+        const link = dialog.querySelector('#cfgProjectLink').value.trim();
+        try {
+            const backend=new URL(url);
+            if(!['http:','https:'].includes(backend.protocol)||backend.username||backend.password)throw new Error('Usa una dirección HTTP o HTTPS válida.');
+            const destination=new URL(location.href);
+            if(link) {
+                const shared=new URL(link);
+                const project=shared.searchParams.get('project');
+                const token=new URLSearchParams(shared.hash.slice(1)).get('access');
+                if(!['http:','https:'].includes(shared.protocol)||!project||!token)throw new Error('Pega el enlace completo del proyecto, incluido su permiso de acceso.');
+                destination.searchParams.set('project',project);
+                destination.hash=new URLSearchParams({access:token}).toString();
+            }
+            persistCollaboration();
+            localStorage.setItem('uml_backend_url',backend.origin);
+            // A fresh page loads the target draft and token without carrying the previous room's revision.
+            history.replaceState(null,'',destination.href);
+            location.reload();
+        } catch(error) {showToast(error.message,'error');}
+
+    };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const statusBadge = document.getElementById('collabStatus');
+    if (statusBadge) {
+        statusBadge.style.cursor = 'pointer';
+        statusBadge.addEventListener('click', showServerConnectionDialog);
+    }
+});

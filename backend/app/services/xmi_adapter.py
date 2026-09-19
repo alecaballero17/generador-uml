@@ -115,6 +115,16 @@ class XMIAdapter:
             attr_el.set("visibility", VISIBILITY_REVERSE.get(attr.visibility, "private"))
             if attr.is_static:
                 attr_el.set("isStatic", "true")
+            if attr.is_final:
+                attr_el.set("isReadOnly", "true")
+            if attr.is_derived:
+                attr_el.set("isDerived", "true")
+            if attr.multiplicity:
+                self._add_multiplicity(attr_el, attr.multiplicity)
+            if attr.default_value is not None:
+                default = SubElement(attr_el, "defaultValue")
+                default.set("xmi:type", "uml:LiteralString")
+                default.set("value", str(attr.default_value))
 
             # Type
             type_el = SubElement(attr_el, "type")
@@ -166,8 +176,15 @@ class XMIAdapter:
             return None
 
         if rel.type == RelationshipType.GENERALIZATION:
-            # Generalization is added inside the child class
-            return None  # Handled during class export
+            child = next((el for el in parent if el.get("xmi:id") == source_xmi), None)
+            if child is None:
+                self.warnings.append(f"No se encontró la clase hija de {rel.id}.")
+                return None
+            generalization = SubElement(child, "generalization")
+            generalization.set("xmi:type", "uml:Generalization")
+            generalization.set("xmi:id", f"rel_{rel.id}")
+            generalization.set("general", target_xmi)
+            return generalization
 
         el = SubElement(parent, "packagedElement")
 
@@ -225,7 +242,7 @@ class XMIAdapter:
         if len(parts) == 2:
             lower, upper = parts
         else:
-            lower = upper = parts[0]
+            lower, upper = ("0", "*") if parts[0] == "*" else (parts[0], parts[0])
 
         lower_el = SubElement(parent, "lowerValue")
         lower_el.set("xmi:type", "uml:LiteralInteger")
@@ -274,7 +291,16 @@ class XMIAdapter:
         x_offset = 50
         y_offset = 50
 
-        for el in model_el:
+        def package_elements(container):
+            for element in container:
+                if element.get("{%s}type" % XMI_NS) == "uml:Package" or element.tag.split("}")[-1] == "Package":
+                    yield from package_elements(element)
+                else:
+                    yield element
+        elements = list(package_elements(model_el))
+        # Resolve every class before any relation, independent of document order.
+        elements.sort(key=lambda el: 0 if el.get("{%s}type" % XMI_NS) in ("uml:Class", "uml:Interface") or el.tag.split("}")[-1] in ("Class", "Interface") else 1)
+        for el in elements:
             xmi_type = el.get("{%s}type" % XMI_NS, "")
             tag = el.tag.split("}")[-1] if "}" in el.tag else el.tag
 
@@ -307,6 +333,21 @@ class XMIAdapter:
             else:
                 self.unsupported_elements.append(f"{tag} ({xmi_type})")
 
+        for el in elements:
+            child = xmi_to_class.get(el.get("{%s}id" % XMI_NS, ""))
+            if child is None:
+                continue
+            for generalization in el:
+                if generalization.tag.split("}")[-1] != "generalization":
+                    continue
+                parent = xmi_to_class.get(generalization.get("general", ""))
+                if parent is None:
+                    self.warnings.append("Herencia con clase padre desconocida, omitida.")
+                    continue
+                diagram.add_relationship(UMLRelationship(
+                    type=RelationshipType.GENERALIZATION,
+                    source=RelationshipEnd(class_id=child.id),
+                    target=RelationshipEnd(class_id=parent.id)))
         return diagram
 
     def _parse_class(self, el: Element, ns: dict) -> UMLClass:
@@ -327,6 +368,17 @@ class XMIAdapter:
                 attr.name = attr_el.get("name", "")
                 attr.visibility = VISIBILITY_MAP.get(attr_el.get("visibility", "private"), "-")
                 attr.is_static = attr_el.get("isStatic", "false").lower() == "true"
+                attr.is_final = attr_el.get("isReadOnly", "false").lower() == "true"
+                attr.is_derived = attr_el.get("isDerived", "false").lower() == "true"
+                default = attr_el.find("defaultValue")
+                if default is not None:
+                    attr.default_value = default.get("value", "")
+                lower, upper = attr_el.find("lowerValue"), attr_el.find("upperValue")
+                if lower is not None or upper is not None:
+                    lo = lower.get("value", "1") if lower is not None else "1"
+                    hi = upper.get("value", "1") if upper is not None else "1"
+                    hi = "*" if hi == "-1" else hi
+                    attr.multiplicity = lo if lo == hi else f"{lo}..{hi}"
 
                 # Parse type
                 type_el = attr_el.find("type")

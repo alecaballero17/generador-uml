@@ -52,12 +52,23 @@ class MDJAdapter:
 
         # Find all classes and relationships recursively
         mdj_id_to_class: dict[str, UMLClass] = {}
+        self._pending_relationships = []
+        self._pending_views = []
         self._find_elements(data, diagram, mdj_id_to_class)
-
-        # Resolve relationship class references
-        for rel in diagram.relationships:
-            # Source and target classIds need to be resolved from mdj_id_to_class
-            pass  # Already resolved in _find_elements
+        parsers = {"UMLAssociation": self._parse_association,
+                   "UMLGeneralization": self._parse_generalization,
+                   "UMLInterfaceRealization": self._parse_realization,
+                   "UMLDependency": self._parse_dependency}
+        for node in self._pending_relationships:
+            relationship = parsers[node["_type"]](node, mdj_id_to_class)
+            if relationship:
+                diagram.add_relationship(relationship)
+        for node in self._pending_views:
+            reference = node.get("model", {})
+            cls = mdj_id_to_class.get(reference.get("$ref")) if isinstance(reference, dict) else None
+            if cls:
+                cls.position = Position(x=node.get("left", 0), y=node.get("top", 0))
+                cls.size = Size(width=node.get("width", 200), height=node.get("height", 120))
 
         return diagram
 
@@ -80,25 +91,10 @@ class MDJAdapter:
             id_map[node.get("_id", "")] = cls
             diagram.add_class(cls)
 
-        elif node_type == "UMLAssociation":
-            rel = self._parse_association(node, id_map)
-            if rel:
-                diagram.add_relationship(rel)
-
-        elif node_type == "UMLGeneralization":
-            rel = self._parse_generalization(node, id_map)
-            if rel:
-                diagram.add_relationship(rel)
-
-        elif node_type == "UMLInterfaceRealization":
-            rel = self._parse_realization(node, id_map)
-            if rel:
-                diagram.add_relationship(rel)
-
-        elif node_type == "UMLDependency":
-            rel = self._parse_dependency(node, id_map)
-            if rel:
-                diagram.add_relationship(rel)
+        elif node_type in MDJ_REL_TYPE_MAP:
+            self._pending_relationships.append(node)
+        elif node_type in ("UMLClassView", "UMLInterfaceView"):
+            self._pending_views.append(node)
 
         elif node_type not in ("Project", "UMLModel", "UMLPackage",
                                 "UMLClassDiagram", "UMLClassView",

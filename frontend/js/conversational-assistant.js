@@ -72,7 +72,7 @@ const ConversationalAssistant = (function() {
     async function getBackendHost() {
         if (activeBackendHost) return activeBackendHost;
         const candidates = [
-            localStorage.getItem('uml_backend_url'),
+            typeof umlBackendOrigin==='function'?umlBackendOrigin():localStorage.getItem('uml_backend_url'),
             'http://127.0.0.1:8000',
             'http://127.0.0.1:8765',
             'http://192.168.1.50:8000',

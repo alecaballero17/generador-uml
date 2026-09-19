@@ -72,3 +72,30 @@ def test_shared_websockets_permissions_merge_and_conflict(tmp_path,monkeypatch):
             readonly.send_json({'type':'update','revision':2,'diagram':diagram()})
             assert receive_type(readonly,'error')['message']=='Enlace de solo lectura'
         assert store.snapshot(room)['revision']==2
+
+def test_reconnect_merges_offline_changes_and_isolates_rooms(tmp_path, monkeypatch):
+    store=collab.Store(tmp_path/'reconnect.sqlite')
+    monkeypatch.setattr(collab,'store',store)
+    monkeypatch.setattr(collab,'connections',{})
+    monkeypatch.setattr(collab,'locks',{})
+    monkeypatch.setattr(collab,'_rate_limits',{})
+    app=FastAPI();app.include_router(collab.router)
+    with TestClient(app) as client:
+        project=client.post('/api/collaboration/projects',json={'diagram':diagram()}).json()
+        other=client.post('/api/collaboration/projects',json={'diagram':diagram()}).json()
+        room=project['projectId'];token=project['token']
+        offline=diagram();offline['classes'][0]['attributes'].append({'id':'correo','name':'correo','type':'String'})
+        with client.websocket_connect(f'/ws/collaboration/{room}') as online:
+            online.send_json({'token':token});receive_type(online,'snapshot')
+            edited=diagram();edited['classes'][0]['position']['x']=410
+            online.send_json({'type':'update','revision':0,'diagram':edited});receive_type(online,'ack')
+        with client.websocket_connect(f'/ws/collaboration/{room}') as reconnect:
+            reconnect.send_json({'token':token});assert receive_type(reconnect,'snapshot')['revision']==1
+            reconnect.send_json({'type':'update','revision':0,'diagram':offline})
+            result=receive_type(reconnect,'ack')
+            assert result['diagram']['classes'][0]['position']['x']==410
+            assert result['diagram']['classes'][0]['attributes'][0]['name']=='correo'
+        assert store.snapshot(other['projectId'])['revision']==0
+        assert store.role(other['projectId'],token) is None
+        persisted=collab.Store(tmp_path/'reconnect.sqlite').snapshot(room)
+        assert persisted['diagram']==result['diagram']

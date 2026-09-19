@@ -1111,7 +1111,7 @@ $('#projectName').addEventListener('change', (e) => {
 async function saveProject() {
     try {
         state.model.name = $('#projectName').value;
-        const response = await fetch('/api/projects/save', {
+        const response = await umlApiFetch('/api/projects/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1140,7 +1140,7 @@ $('#btnSave').addEventListener('click', saveProject);
 
 $('#btnValidate').addEventListener('click', async () => {
     try {
-        const response = await fetch('/api/validate', {
+        const response = await umlApiFetch('/api/validate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(state.model.toJSON()),
@@ -1230,7 +1230,7 @@ $('#btnStartGeneration').addEventListener('click', async () => {
     try {
         log('Generando archivos en el servidor…');
         fillEl.style.width = '0%';
-        const response = await fetch('/api/generate', {
+        const response = await umlApiFetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1280,7 +1280,7 @@ $('#btnStartGeneration').addEventListener('click', async () => {
 
 $('#btnDownloadZip').addEventListener('click', async () => {
     try {
-        const response = await fetch('/api/generate/download', {
+        const response = await umlApiFetch('/api/generate/download', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1293,13 +1293,7 @@ $('#btnDownloadZip').addEventListener('click', async () => {
 
         if (response.ok) {
             const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${state.model.name.replace(/ /g, '_')}_generated.zip`;
-            a.click();
-            URL.revokeObjectURL(url);
-            showToast('Descarga iniciada', 'success');
+            await saveExportBlob(`${state.model.name.replace(/ /g, '_')}_generated.zip`,blob);
         } else {
             showToast('Error al generar ZIP', 'error');
         }
@@ -1312,16 +1306,33 @@ $('#btnDownloadZip').addEventListener('click', async () => {
 // Import / Export
 // ═══════════════════════════════════════════════════════════════════════════
 
-function downloadFile(filename, content, type) {
-    const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+async function saveExportBlob(filename,blob) {
+    if(window.UMLFiles) {
+        if(saveExportBlob.busy)throw new Error('Termina el guardado anterior.');
+        if(blob.size>32*1024*1024)throw new Error('Este archivo supera el límite móvil de 32 MB. Descárgalo desde la web.');
+        saveExportBlob.busy=true;
+        try {
+            const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(blob);});
+            await new Promise((resolve,reject)=>{
+                window.UMLFiles.onmessage=event=>{
+                    window.UMLFiles.onmessage=null;
+                    if(event.data==='saved'){showToast('Archivo guardado','success');resolve();}
+                    else if(event.data==='cancelled'){showToast('Guardado cancelado','info');resolve();}
+                    else reject(new Error('No se pudo guardar el archivo.'));
+                };
+                window.UMLFiles.postMessage(JSON.stringify({name:filename,type:blob.type||'application/octet-stream',data}));
+            });
+        } finally {saveExportBlob.busy=false;}
+        return;
+    }
+    if(location.host==='appassets.androidplatform.net')throw new Error('Actualiza Android System WebView para guardar archivos.');
+    const url=URL.createObjectURL(blob),anchor=document.createElement('a');
+    anchor.href=url;anchor.download=filename;document.body.appendChild(anchor);anchor.click();anchor.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    showToast('Descarga iniciada','success');
+}
+function downloadFile(filename,content,type) {
+    return saveExportBlob(filename,new Blob([content],{type})).catch(error=>showToast(error.message,'error'));
 }
 
 $('#btnExport').addEventListener('click', () => {
@@ -1342,7 +1353,7 @@ $('#btnExportJSON').addEventListener('click', () => {
 $('#btnExportXMI').addEventListener('click', async () => {
     try {
         showToast('Generando XMI 2.1...', 'info');
-        const res = await fetch('/api/export/xmi', {
+        const res = await umlApiFetch('/api/export/xmi', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ diagram: state.model.toJSON() }),
@@ -1360,7 +1371,7 @@ $('#btnExportXMI').addEventListener('click', async () => {
 $('#btnExportMDJ').addEventListener('click', async () => {
     try {
         showToast('Generando StarUML MDJ...', 'info');
-        const res = await fetch('/api/export/mdj', {
+        const res = await umlApiFetch('/api/export/mdj', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ diagram: state.model.toJSON() }),
@@ -1469,7 +1480,7 @@ $('#importFileInput').addEventListener('change', async (e) => {
         if (ext === 'xmi' || ext === 'xml') {
             const formData = new FormData();
             formData.append('file', file);
-            const res = await fetch('/api/import/xmi', { method: 'POST', body: formData });
+            const res = await umlApiFetch('/api/import/xmi', { method: 'POST', body: formData });
             if (!res.ok) {
                 const errJson = await res.json().catch(() => ({ detail: 'Error en servidor' }));
                 throw new Error(errJson.detail || 'Error en importador XMI');
@@ -1480,7 +1491,7 @@ $('#importFileInput').addEventListener('change', async (e) => {
         } else if (ext === 'mdj') {
             const formData = new FormData();
             formData.append('file', file);
-            const res = await fetch('/api/import/mdj', { method: 'POST', body: formData });
+            const res = await umlApiFetch('/api/import/mdj', { method: 'POST', body: formData });
             if (!res.ok) {
                 const errJson = await res.json().catch(() => ({ detail: 'Error en servidor' }));
                 throw new Error(errJson.detail || 'Error en importador MDJ');
@@ -1495,7 +1506,7 @@ $('#importFileInput').addEventListener('change', async (e) => {
             if (parsed._type === 'Project') {
                 const formData = new FormData();
                 formData.append('file', file);
-                const res = await fetch('/api/import/mdj', { method: 'POST', body: formData });
+                const res = await umlApiFetch('/api/import/mdj', { method: 'POST', body: formData });
                 if (!res.ok) throw new Error(await res.text());
                 const data = await res.json();
                 importedDiagram = data.diagram;
@@ -1753,22 +1764,26 @@ $('#btnProcessPhoto').addEventListener('click', async () => {
     showToast('Procesando imagen con Visión por Computadora y OCR...', 'info');
 
     try {
-        const formData = new FormData();
-        formData.append('file', state.pendingPhotoFile);
-        const isMobile = (location.host === 'appassets.androidplatform.net' || location.protocol === 'file:');
-        const apiOrigin = isMobile ? 'http://127.0.0.1:8000' : '';
-        const response = await fetch(`${apiOrigin}/api/photo/interpret`, {
-            method: 'POST',
-            body: formData,
+        state.detectedDiagram = null;
+        state.detectedPhotoConnections = null;
+        const photo = await recognizeLocalPhoto(state.pendingPhotoFile);
+        const plans = reviewPhotoText(photo.text);
+        if(!plans.length)throw new Error('No se reconocieron clases válidas. Prueba una imagen más nítida.');
+        const diagram = new UMLModel();
+        diagram.name = state.model.name;
+        plans.forEach((plan,index)=>{
+            const cls=new UMLClassNode(plan.name,60+(index%3)*260,60+Math.floor(index/3)*300);
+            plan.attributes.forEach(attr=>cls.addAttribute({...attr,id:crypto.randomUUID()}));
+            (plan.operations||[]).forEach(op=>cls.addOperation({...op,id:crypto.randomUUID()}));
+            diagram.addClass(cls);
         });
-
-        if (!response.ok) {
-            const errData = await response.json().catch(() => ({ detail: 'Error en servidor' }));
-            throw new Error(errData.detail || 'Error procesando imagen');
-        }
-
-        const result = await response.json();
+        const result={diagram:diagram.toJSON(),detectedClassCount:plans.length,detectedRelationshipCount:0,
+            warnings:['Revisa nombres y tipos antes de aceptar. Los tipos ausentes usan valores predeterminados. Las conexiones son propuestas y todavía no se incorporan automáticamente.'],
+            reviewNotes:plans.map(p=>`${p.name}: ${p.attributes.map(a=>a.name).join(', ')}; métodos: ${(p.operations||[]).map(o=>o.name+'()').join(', ') || 'ninguno'}`)};
+        for(const pair of photo.connections||[])result.reviewNotes.push('Conexión candidata: '+pair.map(i=>photo.names[i]).join(' ↔ '));
+        for(const group of photo.ambiguous||[])result.reviewNotes.push('Cruce por resolver: '+group.map(i=>photo.names[i]).join(', '));
         state.detectedDiagram = result.diagram;
+        state.detectedPhotoConnections = photo;
 
         // Render Review in Modal
         const reviewContainer = $('#photoReviewContainer');
@@ -1776,7 +1791,7 @@ $('#btnProcessPhoto').addEventListener('click', async () => {
 
         const badge = $('#photoConfidenceBadge');
         const confPercent = Math.round((result.confidence || 0.75) * 100);
-        badge.textContent = `Confianza: ${confPercent}%`;
+        badge.textContent = 'Lectura local: requiere revisión';
         badge.className = `confidence-badge ${confPercent < 70 ? 'warning' : ''}`;
 
         const stats = $('#photoReviewStats');
@@ -1809,6 +1824,7 @@ $('#btnProcessPhoto').addEventListener('click', async () => {
 
 $('#btnAcceptPhotoDiagram').addEventListener('click', () => {
     if (!state.detectedDiagram) return;
+    if(collaborationState.role==='viewer'){showToast('Este enlace es de solo lectura','warning');return;}
     saveUndo();
     state.model = UMLModel.fromJSON(state.detectedDiagram);
     state.classCounter = state.model.classes.length + 1;
@@ -1819,6 +1835,15 @@ $('#btnAcceptPhotoDiagram').addEventListener('click', () => {
     saveCurrentProjectToStorage();
     broadcastChange();
     $('#photoModal').classList.add('hidden');
+    const photo=state.detectedPhotoConnections;
+    if(photo && (photo.connections?.length || photo.ambiguous?.length)) {
+        document.getElementById('webPhotoConnectionsDialog')?.remove();
+        const dialog=document.createElement('dialog');dialog.id='webPhotoConnectionsDialog';
+        renderPhotoConnections(photo,dialog);
+        const close=document.createElement('button');close.type='button';close.textContent='Cerrar revisión';close.onclick=()=>{dialog.close();dialog.remove();};dialog.append(close);
+        document.body.append(dialog);dialog.showModal();
+    }
+    state.detectedDiagram=null;
     showToast(`Diagrama importado al lienzo (${state.model.classes.length} clases)`, 'success');
 });
 

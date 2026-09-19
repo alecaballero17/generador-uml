@@ -1545,3 +1545,5 @@ dialog.mobile-bottom-sheet::backdrop {
     transform: scale(0.94);
 }
 
+
+.mobile-editor dialog form label{display:block;margin:12px 0}.mobile-editor dialog form select{display:block;width:100%;min-height:44px;font-size:16px}
