@@ -399,14 +399,14 @@ class MDJAdapter:
                     "_type": "UMLAssociationEnd",
                     "reference": {"$ref": source_mdj},
                     "name": rel.source.role or "",
-                    "multiplicity": rel.source.multiplicity,
+                    "multiplicity": str(rel.source.multiplicity) if hasattr(rel.source.multiplicity, 'value') else rel.source.multiplicity,
                     "aggregation": agg,
                 },
                 "end2": {
                     "_type": "UMLAssociationEnd",
                     "reference": {"$ref": target_mdj},
                     "name": rel.target.role or "",
-                    "multiplicity": rel.target.multiplicity,
+                    "multiplicity": str(rel.target.multiplicity) if hasattr(rel.target.multiplicity, 'value') else rel.target.multiplicity,
                 },
             }
 

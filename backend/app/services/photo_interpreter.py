@@ -372,50 +372,211 @@ class PhotoInterpreter:
         )
 
     def _detect_relationships(self, binary: np.ndarray, boxes: List[DetectedBox]) -> List[DetectedLine]:
-        """Detecta líneas conectando las cajas de clases."""
+        """Detecta líneas conectando las cajas de clases e identifica tipos de relación.
+
+        Pipeline:
+        1. HoughLinesP detecta segmentos de línea
+        2. Se agrupan segmentos colineales para formar conexiones box-a-box
+        3. Se clasifican endpoints: flecha simple (asociación dirigida), triángulo
+           hueco (herencia), rombo relleno (composición), rombo hueco (agregación)
+        4. Se buscan multiplicidades con OCR en vecindad de cada endpoint
+        5. Fallback: inferencia por proximidad espacial
+        """
         if len(boxes) < 2:
             return []
 
         lines: List[DetectedLine] = []
 
+        # Crear máscara que excluya el interior de las cajas detectadas
+        box_mask = np.zeros_like(binary)
+        for b in boxes:
+            cv2.rectangle(box_mask, (b.x, b.y), (b.x + b.w, b.y + b.h), 255, -1)
+        lines_only = cv2.bitwise_and(binary, cv2.bitwise_not(box_mask))
+
         # Usar HoughLinesP para detectar segmentos de línea recta
         hough_lines = cv2.HoughLinesP(
-            binary, 1, np.pi / 180, threshold=40,
-            minLineLength=30, maxLineGap=15
+            lines_only, 1, np.pi / 180, threshold=30,
+            minLineLength=20, maxLineGap=20
         )
 
         if hough_lines is None:
-            # Inferencia de proximidad cuando las líneas tienen pequeños quiebres
-            return []
+            # Fallback: inferencia por proximidad espacial
+            return self._infer_closest_connections(boxes)
 
+        # Agrupar segmentos colineales que conectan las mismas cajas
+        raw_connections: Dict[tuple, List[Tuple[int, int, int, int]]] = {}
         for line_seg in hough_lines:
             coords = line_seg.flatten()
             if len(coords) < 4:
                 continue
             x1, y1, x2, y2 = int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3])
-            src_box = self._find_closest_box((x1, y1), boxes)
-            dst_box = self._find_closest_box((x2, y2), boxes)
+
+            # Filtrar segmentos muy cortos (ruido)
+            seg_len = math.hypot(x2 - x1, y2 - y1)
+            if seg_len < 15:
+                continue
+
+            src_box = self._find_closest_box((x1, y1), boxes, max_dist=80.0)
+            dst_box = self._find_closest_box((x2, y2), boxes, max_dist=80.0)
 
             if src_box and dst_box and src_box.id != dst_box.id:
-                # Evitar duplicados
-                already_exists = any(
-                    (l.source_box_id == src_box.id and l.target_box_id == dst_box.id) or
-                    (l.source_box_id == dst_box.id and l.target_box_id == src_box.id)
-                    for l in lines
-                )
-                if not already_exists:
-                    lines.append(DetectedLine(
-                        start_pt=(x1, y1),
-                        end_pt=(x2, y2),
-                        source_box_id=src_box.id,
-                        target_box_id=dst_box.id,
-                        rel_type=RelationshipType.ASSOCIATION,
-                    ))
+                key = tuple(sorted([src_box.id, dst_box.id]))
+                if key not in raw_connections:
+                    raw_connections[key] = []
+                raw_connections[key].append((x1, y1, x2, y2))
 
+        for (box_id_a, box_id_b), segments in raw_connections.items():
+            # Tomar el segmento más largo como representativo
+            best_seg = max(segments, key=lambda s: math.hypot(s[2]-s[0], s[3]-s[1]))
+            x1, y1, x2, y2 = best_seg
+
+            # Determinar cuál extremo está cerca de box_a y cuál de box_b
+            box_a = next(b for b in boxes if b.id == box_id_a)
+            box_b = next(b for b in boxes if b.id == box_id_b)
+            dist_1a = self._point_to_box_dist((x1, y1), box_a)
+            dist_1b = self._point_to_box_dist((x1, y1), box_b)
+
+            if dist_1a <= dist_1b:
+                src_pt, dst_pt = (x1, y1), (x2, y2)
+                src_id, dst_id = box_id_a, box_id_b
+            else:
+                src_pt, dst_pt = (x2, y2), (x1, y1)
+                src_id, dst_id = box_id_b, box_id_a
+
+            # Clasificar el tipo de relación por la forma del endpoint
+            rel_type = self._classify_endpoint(binary, dst_pt, src_pt)
+
+            # Detectar multiplicidades cerca de los endpoints
+            src_mult = self._detect_multiplicity_near(binary, src_pt)
+            dst_mult = self._detect_multiplicity_near(binary, dst_pt)
+
+            detected = DetectedLine(
+                start_pt=src_pt,
+                end_pt=dst_pt,
+                source_box_id=src_id,
+                target_box_id=dst_id,
+                rel_type=rel_type,
+                confidence=0.80 if rel_type != RelationshipType.ASSOCIATION else 0.75,
+            )
+            if src_mult or dst_mult:
+                detected.raw_annotation = f"src={src_mult or '?'} dst={dst_mult or '?'}"
+                self.review_notes.append(
+                    f"Multiplicidad detectada: {src_mult or '?'}..{dst_mult or '?'} — confirmar manualmente."
+                )
+
+            lines.append(detected)
+
+        # Si HoughLines no encontró conexiones, usar proximidad
         if not lines:
-            lines = []
+            lines = self._infer_closest_connections(boxes)
 
         return lines
+
+    def _point_to_box_dist(self, pt: Tuple[int, int], box: DetectedBox) -> float:
+        """Distancia de un punto al borde del rectángulo de la caja."""
+        px, py = pt
+        dx = max(box.x - px, 0, px - (box.x + box.w))
+        dy = max(box.y - py, 0, py - (box.y + box.h))
+        return math.hypot(dx, dy)
+
+    def _classify_endpoint(self, binary: np.ndarray, tip_pt: Tuple[int, int],
+                           origin_pt: Tuple[int, int]) -> RelationshipType:
+        """Clasifica el tipo de relación analizando la forma del endpoint (punta de flecha).
+
+        - Triángulo hueco grande → INHERITANCE (generalización)
+        - Rombo relleno → COMPOSITION
+        - Rombo hueco → AGGREGATION
+        - Flecha simple / nada → ASSOCIATION
+        """
+        h, w = binary.shape[:2]
+        tx, ty = tip_pt
+
+        # Región de interés alrededor del endpoint (40x40 px)
+        roi_size = 40
+        rx1 = max(0, tx - roi_size)
+        ry1 = max(0, ty - roi_size)
+        rx2 = min(w, tx + roi_size)
+        ry2 = min(h, ty + roi_size)
+
+        if rx2 - rx1 < 10 or ry2 - ry1 < 10:
+            return RelationshipType.ASSOCIATION
+
+        roi = binary[ry1:ry2, rx1:rx2]
+
+        # Detectar contornos en la ROI del endpoint
+        contours, _ = cv2.findContours(roi, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area < 80:
+                continue  # ruido
+
+            peri = cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, 0.06 * peri, True)
+            num_vertices = len(approx)
+
+            # Triángulo → herencia (3 vértices, área significativa)
+            if num_vertices == 3 and area > 100:
+                self.review_notes.append(
+                    f"Triángulo detectado en ({tx},{ty}): interpretado como HERENCIA."
+                )
+                return RelationshipType.GENERALIZATION
+
+            # Rombo → composición o agregación (4 vértices, rotado ~45°)
+            if num_vertices == 4 and area > 80:
+                # Verificar si es un rombo (ángulos internos ~90° en orientación diagonal)
+                rect = cv2.minAreaRect(cnt)
+                box_w, box_h = rect[1]
+                if box_w > 0 and box_h > 0:
+                    aspect = min(box_w, box_h) / max(box_w, box_h)
+                    if aspect > 0.5:  # Forma aproximadamente cuadrada/romboidal
+                        # Verificar si está relleno (ratio de píxeles blancos)
+                        mask = np.zeros(roi.shape, dtype=np.uint8)
+                        cv2.drawContours(mask, [cnt], -1, 255, -1)
+                        fill_ratio = cv2.countNonZero(cv2.bitwise_and(roi, mask)) / max(area, 1)
+
+                        if fill_ratio > 0.6:
+                            self.review_notes.append(
+                                f"Rombo relleno en ({tx},{ty}): interpretado como COMPOSICIÓN."
+                            )
+                            return RelationshipType.COMPOSITION
+                        else:
+                            self.review_notes.append(
+                                f"Rombo hueco en ({tx},{ty}): interpretado como AGREGACIÓN."
+                            )
+                            return RelationshipType.AGGREGATION
+
+        return RelationshipType.ASSOCIATION
+
+    def _detect_multiplicity_near(self, binary: np.ndarray, pt: Tuple[int, int]) -> Optional[str]:
+        """Busca texto de multiplicidad (0..1, 1..*, etc.) cerca de un endpoint de línea."""
+        if not PYTESSERACT_AVAILABLE:
+            return None
+
+        h, w = binary.shape[:2]
+        px, py = pt
+        roi_margin = 35
+
+        rx1 = max(0, px - roi_margin)
+        ry1 = max(0, py - roi_margin)
+        rx2 = min(w, px + roi_margin)
+        ry2 = min(h, py + roi_margin)
+
+        if rx2 - rx1 < 10 or ry2 - ry1 < 10:
+            return None
+
+        roi = binary[ry1:ry2, rx1:rx2]
+        try:
+            inv = cv2.bitwise_not(roi)
+            text = pytesseract.image_to_string(inv, config="--psm 7 -c tessedit_char_whitelist=01234567890.*n").strip()
+            # Patterns de multiplicidad UML: 0..1, 1..*, *, 0..*, 1, n
+            mult_pattern = re.match(r'^([0-9n*]+(?:\.\.[0-9n*]+)?)$', text)
+            if mult_pattern:
+                return mult_pattern.group(1)
+        except Exception:
+            pass
+
+        return None
 
     def _find_closest_box(self, pt: Tuple[int, int], boxes: List[DetectedBox], max_dist: float = 60.0) -> Optional[DetectedBox]:
         px, py = pt

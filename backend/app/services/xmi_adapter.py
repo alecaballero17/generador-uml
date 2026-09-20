@@ -58,6 +58,16 @@ class XMIAdapter:
         self.warnings: list[str] = []
         self.unsupported_elements: list[str] = []
 
+    @staticmethod
+    def _get_xmi_attr(el: Element, name: str) -> str:
+        """Obtiene un atributo XML/XMI soportando diferentes prefijos de namespace o sin namespace."""
+        target = name.lower()
+        for k, v in el.attrib.items():
+            local = k.split("}")[-1].lower() if "}" in k else k.lower()
+            if local == target or local == f"xmi:{target}":
+                return v
+        return el.get(name, "")
+
     # ─── Export (UMLDiagram → XMI) ─────────────────────────────────────
 
     def export_to_xmi(self, diagram: UMLDiagram) -> str:
@@ -238,6 +248,10 @@ class XMIAdapter:
 
     def _add_multiplicity(self, parent: Element, mult_str: str):
         """Add multiplicity lower/upper bounds."""
+        # Handle both string and enum Multiplicity values
+        if hasattr(mult_str, 'value'):
+            mult_str = mult_str.value
+        mult_str = str(mult_str)
         parts = mult_str.split("..")
         if len(parts) == 2:
             lower, upper = parts
@@ -270,13 +284,13 @@ class XMIAdapter:
         # Find the model
         model_el = root.find(".//uml:Model", ns)
         if model_el is None:
-            # Try without namespace
             model_el = root.find(".//{http://www.omg.org/spec/UML/20131001}Model")
         if model_el is None:
-            # Try packagedElement approach
-            for child in root:
-                if "Model" in child.tag or child.get("{%s}type" % XMI_NS) == "uml:Model":
-                    model_el = child
+            for elem in root.iter():
+                tag_name = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+                x_type = self._get_xmi_attr(elem, "type")
+                if tag_name == "Model" or x_type == "uml:Model":
+                    model_el = elem
                     break
 
         if model_el is None:
@@ -293,15 +307,17 @@ class XMIAdapter:
 
         def package_elements(container):
             for element in container:
-                if element.get("{%s}type" % XMI_NS) == "uml:Package" or element.tag.split("}")[-1] == "Package":
+                x_type = self._get_xmi_attr(element, "type")
+                tag_name = element.tag.split("}")[-1]
+                if x_type == "uml:Package" or tag_name == "Package":
                     yield from package_elements(element)
                 else:
                     yield element
         elements = list(package_elements(model_el))
         # Resolve every class before any relation, independent of document order.
-        elements.sort(key=lambda el: 0 if el.get("{%s}type" % XMI_NS) in ("uml:Class", "uml:Interface") or el.tag.split("}")[-1] in ("Class", "Interface") else 1)
+        elements.sort(key=lambda el: 0 if self._get_xmi_attr(el, "type") in ("uml:Class", "uml:Interface") or el.tag.split("}")[-1] in ("Class", "Interface") else 1)
         for el in elements:
-            xmi_type = el.get("{%s}type" % XMI_NS, "")
+            xmi_type = self._get_xmi_attr(el, "type")
             tag = el.tag.split("}")[-1] if "}" in el.tag else el.tag
 
             if xmi_type in ("uml:Class", "uml:Interface") or tag in ("Class", "Interface"):
@@ -313,8 +329,9 @@ class XMIAdapter:
                     x_offset = 50
                     y_offset += 200
 
-                xmi_id = el.get("{%s}id" % XMI_NS, "")
-                xmi_to_class[xmi_id] = cls
+                xmi_id = self._get_xmi_attr(el, "id") or el.get("id", "")
+                if xmi_id:
+                    xmi_to_class[xmi_id] = cls
                 diagram.add_class(cls)
 
                 if xmi_type == "uml:Interface" or tag == "Interface":
@@ -334,13 +351,15 @@ class XMIAdapter:
                 self.unsupported_elements.append(f"{tag} ({xmi_type})")
 
         for el in elements:
-            child = xmi_to_class.get(el.get("{%s}id" % XMI_NS, ""))
+            child_id = self._get_xmi_attr(el, "id") or el.get("id", "")
+            child = xmi_to_class.get(child_id)
             if child is None:
                 continue
             for generalization in el:
-                if generalization.tag.split("}")[-1] != "generalization":
+                if generalization.tag.split("}")[-1].lower() != "generalization":
                     continue
-                parent = xmi_to_class.get(generalization.get("general", ""))
+                parent_ref = generalization.get("general") or self._get_xmi_attr(generalization, "general")
+                parent = xmi_to_class.get(parent_ref)
                 if parent is None:
                     self.warnings.append("Herencia con clase padre desconocida, omitida.")
                     continue
@@ -429,8 +448,14 @@ class XMIAdapter:
         ends = []
         for child in el:
             tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
-            if tag == "ownedEnd" or child.get("{%s}type" % XMI_NS) == "uml:Property":
-                end_type = child.get("type", "")
+            x_type = self._get_xmi_attr(child, "type")
+            if tag == "ownedEnd" or x_type == "uml:Property":
+                end_type = child.get("type") or self._get_xmi_attr(child, "type")
+                if not end_type or end_type == "uml:Property":
+                    type_sub = child.find("type")
+                    if type_sub is not None:
+                        end_type = self._get_xmi_attr(type_sub, "idref") or type_sub.get("href", "")
+
                 end_role = child.get("name")
                 end_agg = child.get("aggregation", "none")
 
@@ -487,8 +512,16 @@ class XMIAdapter:
                             xmi_to_class: dict[str, UMLClass],
                             xmi_type: str) -> Optional[UMLRelationship]:
         """Parse a directed relationship (realization, dependency)."""
-        client_id = el.get("client", "")
-        supplier_id = el.get("supplier", "")
+        client_id = el.get("client", "") or self._get_xmi_attr(el, "client")
+        supplier_id = el.get("supplier", "") or self._get_xmi_attr(el, "supplier")
+        if not client_id:
+            c_el = el.find("client")
+            if c_el is not None:
+                client_id = self._get_xmi_attr(c_el, "idref") or c_el.get("href", "")
+        if not supplier_id:
+            s_el = el.find("supplier")
+            if s_el is not None:
+                supplier_id = self._get_xmi_attr(s_el, "idref") or s_el.get("href", "")
 
         source = xmi_to_class.get(client_id)
         target = xmi_to_class.get(supplier_id)

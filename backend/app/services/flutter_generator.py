@@ -1793,6 +1793,7 @@ class _DetailTile extends StatelessWidget {{
 
         controllers_decl = []
         controllers_init = []
+        controllers_dispose = []
         form_fields_widgets = []
         model_construction_fields = []
 
@@ -1835,6 +1836,8 @@ class _DetailTile extends StatelessWidget {{
               const SizedBox(height: 12),""")
                 model_construction_fields.append(f"        {attr.name}: _{attr.name},")
             else:
+                controllers_decl.append(f"  final TextEditingController {c_name} = TextEditingController();")
+                controllers_dispose.append(f"    {c_name}.dispose();")
                 if dtype == "List<int>":
                     controllers_init.append(f"    {c_name}.text = (widget.item != null && widget.item!.{attr.name} != null) ? widget.item!.{attr.name}!.join(',') : '';")
                 else:
@@ -1884,6 +1887,7 @@ class _DetailTile extends StatelessWidget {{
 
         controllers_decl_str = "\n".join(controllers_decl)
         controllers_init_str = "\n".join(controllers_init)
+        controllers_dispose_str = "\n".join(controllers_dispose)
         form_fields_str = "\n".join(form_fields_widgets)
         model_construction_str = "\n".join(model_construction_fields)
         has_date = any(self._dart_type(a.type) == "DateTime" for a in cls.attributes)
@@ -1913,6 +1917,12 @@ class _{cls.name}FormScreenState extends State<{cls.name}FormScreen> {{
   void initState() {{
     super.initState();
 {controllers_init_str}
+  }}
+
+  @override
+  void dispose() {{
+{controllers_dispose_str}
+    super.dispose();
   }}
 
   Future<void> _save() async {{

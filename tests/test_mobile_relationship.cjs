@@ -7,3 +7,9 @@ const code=fs.readFileSync('frontend/js/mobile.js','utf8');vm.runInContext(code.
 vm.runInContext('openMobileRelationship()',ctx);form.onsubmit({preventDefault(){}});assert.equal(vm.runInContext('state.model.relationships.length',ctx),1);
 elements.source.value='b';elements.target.value='a';form.onsubmit({preventDefault(){}});assert(error.includes('ciclo'));assert.equal(vm.runInContext('state.model.relationships.length',ctx),1);
 console.log('Relaciones móviles: creación local y prevención de ciclo verificadas.');
+
+assert.equal(vm.runInContext('state.model.relationships[0].source.multiplicity',ctx),null);
+assert.equal(vm.runInContext('state.model.relationships[0].target.multiplicity',ctx),null);
+elements.type.value='association';elements.sourceMult.value='';elements.targetMult.value='';form.onsubmit({preventDefault(){}});
+assert.equal(vm.runInContext('state.model.relationships[1].source.multiplicity',ctx),null);
+assert.equal(vm.runInContext('state.model.relationships[1].target.multiplicity',ctx),null);

@@ -549,19 +549,25 @@ public class GlobalExceptionHandler {{
         fields = []
         extra_imports = set()
 
+        # Inheritance
+        parent_classes = self.diagram.get_parent_classes(cls.id)
+
         # ID field (always add if not explicitly in attributes)
         has_id = any(a.name.lower() == "id" for a in cls.attributes)
 
         # Process attributes
         for attr in cls.attributes:
+            if parent_classes and attr.name.lower() in ("id", "version"):
+                continue
+            if attr.name.lower() == "version":
+                continue
+
             java_type = get_java_type(attr.type, self.diagram)
             field_name = to_camel_case(attr.name)
 
-            for imp in get_java_imports_for_type(java_type):
-                extra_imports.add(imp)
-
             annotations = []
             if attr.name.lower() == "id":
+                java_type = "Long"
                 annotations.append("    @Id")
                 annotations.append("    @GeneratedValue(strategy = GenerationType.IDENTITY)")
             else:
@@ -569,6 +575,9 @@ public class GlobalExceptionHandler {{
                 if "NotNull" in str(attr.constraints) or attr.multiplicity == "1":
                     col_parts.append("nullable = false")
                 annotations.append(f"    @Column({', '.join(col_parts)})")
+
+            for imp in get_java_imports_for_type(java_type):
+                extra_imports.add(imp)
 
             # Validation annotations
             if java_type == "String":
@@ -596,8 +605,6 @@ public class GlobalExceptionHandler {{
             import_lines.append(f"import {imp};")
         import_lines.append("")
 
-        # Inheritance
-        parent_classes = self.diagram.get_parent_classes(cls.id)
         extends_clause = ""
         if parent_classes:
             parent_name = to_pascal_case(parent_classes[0].name)

@@ -32,7 +32,7 @@ def attributes(diagram, cls, seen=None):
         return []
     seen.add(cls.id)
     inherited = [a for parent in diagram.get_parent_classes(cls.id) for a in attributes(diagram, parent, seen)]
-    by_name = {a.name: a for a in inherited + cls.attributes if a.name != 'id'}
+    by_name = {a.name: a for a in inherited + cls.attributes if a.name.lower() not in ('id', 'version')}
     return list(by_name.values())
 
 

@@ -7,7 +7,7 @@
 [![Spring Boot](https://img.shields.io/badge/Generated_Backend-Spring_Boot_3.x-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![Flutter](https://img.shields.io/badge/Generated_Mobile-Flutter_3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![UML](https://img.shields.io/badge/Standard-UML_2.5+-blue)](https://www.omg.org/spec/UML/)
-[![Tests](https://img.shields.io/badge/Tests-28%2F28%20Passed-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-67%2F67%20Passed-brightgreen)](tests/)
 
 **GeneradorUML** es una herramienta CASE (*Computer-Aided Software Engineering*) integral de nivel profesional que permite modelar, editar e interpretar diagramas de clases **UML 2.5+**, colaborar en tiempo real y transformar automáticamente los diagramas en un sistema de producción funcional de extremo a extremo:
 
@@ -299,6 +299,39 @@ El servicio REST quedará disponible en: `http://localhost:8080/api/<entidad>`.
 
 - [Manual de Usuario](docs/manual_usuario.md): Guía de modelado de clases, atajos de teclado, dictado por voz y exportación.
 - [Documento de Arquitectura](docs/arquitectura.md): Patrones de diseño, metamodelo UML 2.5+, Three-Way Merge y pipeline de generación.
+
+## ✅ Evidencia de Validación (20 septiembre 2026)
+
+### Tests Automatizados — 67/67 Python + 9 Node.js
+
+| Suite | Tests | Estado |
+|-------|------:|--------|
+| `test_generators.py` — Spring Boot + Flutter + Validador UML + XMI/MDJ | 20 | ✅ |
+| `test_collaboration.py` — Merge 3-way, permisos, reconexión | 5 | ✅ |
+| `test_api_extensions.py` — Rate limiting, foto reject, proyectos | 4 | ✅ |
+| `test_full_generation.py` — Proyecto completo SB + Flutter + Postman | 13 | ✅ |
+| `test_photo_relationships.py` — Clasificación de flechas/rombos/líneas | 9 | ✅ |
+| `test_interop_roundtrip.py` — Roundtrip XMI + MDJ doble + Enterprise Architect | 10 | ✅ |
+| `test_interop_samples.py` — Archivos reales veterinaria | 2 | ✅ |
+| `test_mdj_import.py` — Forward reference, vistas | 1 | ✅ |
+| `test_xmi_roundtrip.py` — Herencia, relación antes de clases, paquetes | 3 | ✅ |
+| **Node.js:** UML commands, assistant, mobile, photo, offline, backend | 9 suites | ✅ |
+
+### Verificación en Navegador
+- **Desktop** (`http://localhost:8000`): Canvas SVG, creación de clases, relaciones, propiedades — 0 errores JS
+- **Móvil** (`http://localhost:8000/?view=mobile`): Asistente Siri UML, panel de voz — 0 errores JS
+
+### Funcionalidades Validadas
+- ✅ Editor visual SVG (drag & drop, zoom, relaciones 6 tipos)
+- ✅ Validación UML 2.5+ (herencia circular, nombres duplicados)
+- ✅ Generación Spring Boot 3.x (JPA, `mappedBy`, `@JsonManagedReference`)
+- ✅ Generación Flutter 3.x (modelos, CRUD, offline con `SharedPreferences`)
+- ✅ Generación colección Postman v2.1.0
+- ✅ Colaboración WebSocket (three-way merge, permisos, reconexión)
+- ✅ Import/Export XMI 2.1 + MDJ (StarUML) con roundtrip preservado
+- ✅ Interpretación de fotos: detección de cajas, OCR, clasificación de relaciones (herencia/composición/agregación)
+- ✅ Asistente conversacional con Gemini Flash + fallback local
+- ✅ Motor de voz Whisper Tiny ONNX + Tesseract WASM (offline)
 
 ---
 *GeneradorUML — Herramienta CASE de Ingeniería de Software.*

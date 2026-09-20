@@ -12,3 +12,7 @@ const boxes=ctx.detectPhotoBoxes({width,height,data});assert.equal(boxes.length,
 console.log('Photo segmentation: blank image and connected class boxes passed');
 
 const links=ctx.detectPhotoConnections({width,height,data},boxes);assert.equal(links.connections.length,1);assert.equal(links.ambiguous.length,0);
+const hints=ctx.detectPhotoConnections({width,height,data},boxes,[{kind:'hollowDiamond',box:0,x:145,y:75}]);
+assert.equal(hints.suggestions.length,1);assert.equal(hints.suggestions[0].source,0);assert.equal(hints.suggestions[0].target,1);assert.equal(hints.suggestions[0].type,'aggregation');
+assert.equal(ctx.detectPhotoConnections({width,height,data},boxes,[{kind:'hollowDiamond',box:0,x:10,y:280}]).suggestions.length,0,'Distant markers must not classify connections');
+assert.equal(ctx.detectPhotoConnections({width,height,data},boxes,[{kind:'hollowTriangle',box:0,x:145,y:75}]).suggestions.length,0,'Triangle alone must not imply a solid inheritance line');

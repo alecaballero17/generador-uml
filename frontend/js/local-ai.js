@@ -175,18 +175,19 @@ function detectPhotoBoxes(image) {
     return boxes.sort((a,b)=>a.y-b.y||a.x-b.x);
 }
 // Candidate connections only: crossings and arrow semantics require review.
-function detectPhotoConnections(image, boxes) {
+function detectPhotoConnections(image, boxes, markers = []) {
     const {width:w,height:h,data}=image, mask=new Uint8Array(w*h);
     for(let i=0;i<mask.length;i++)mask[i]=data[i*4]+data[i*4+1]+data[i*4+2]<390?1:0;
     for(const b of boxes)for(let y=Math.max(0,b.y-8);y<Math.min(h,b.y+b.height+9);y++)
         mask.fill(0,y*w+Math.max(0,b.x-8),y*w+Math.min(w,b.x+b.width+9));
-    const connections=[],ambiguous=[];
+    const connections=[],ambiguous=[],suggestions=[];
     const queue=new Int32Array(w*h);
     for(let seed=0;seed<mask.length;seed++) {
         if(!mask[seed])continue;
         let head=0,tail=1;queue[0]=seed;mask[seed]=0;
-        const touched=new Set();
+        const touched=new Set(),markerDistances=markers.map(()=>Infinity);
         while(head<tail){const pos=queue[head++],x=pos%w,y=Math.floor(pos/w);
+            markers.forEach((m,i)=>{markerDistances[i]=Math.min(markerDistances[i],Math.hypot(x-m.x,y-m.y));});
             boxes.forEach((b,i)=>{if(x>=b.x-13&&x<=b.x+b.width+13&&y>=b.y-13&&y<=b.y+b.height+13)touched.add(i);});
             for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
                 const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=w||ny>=h)continue;
@@ -195,10 +196,49 @@ function detectPhotoConnections(image, boxes) {
         }
         if(tail<25||touched.size<2)continue;
         const indices=[...touched].sort((a,b)=>a-b);
+        const localMarkers=markers.filter((m,i)=>markerDistances[i]<=18&&indices.includes(m.box));
+        if(indices.length===2&&localMarkers.length===1&&localMarkers[0].kind==='hollowDiamond') {
+            const source=localMarkers[0].box,target=indices.find(i=>i!==source);
+            suggestions.push({source,target,type:'aggregation',reason:'Rombo vacío conectado a la línea'});
+        }
         const target=indices.length===2?connections:ambiguous;
         if(!target.some(item=>item.join(',')===indices.join(',')))target.push(indices);
     }
-    return {connections,ambiguous};
+    return {connections,ambiguous,suggestions};
+}
+// Recognize enclosed hollow markers; text inside class boxes is excluded.
+function detectPhotoMarkers(image, boxes) {
+    const {width:w,height:h,data}=image, seen=new Uint8Array(w*h),queue=new Int32Array(w*h),markers=[];
+    const white=i=>data[i*4]+data[i*4+1]+data[i*4+2]>=450;
+    for(let seed=0;seed<seen.length;seed++) {
+        if(seen[seed]||!white(seed))continue;
+        let head=0,tail=1,minX=w,maxX=0,minY=h,maxY=0,border=false;queue[0]=seed;seen[seed]=1;
+        while(head<tail){const pos=queue[head++],x=pos%w,y=Math.floor(pos/w);
+            minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+            if(x===0||y===0||x===w-1||y===h-1)border=true;
+            for(let direction=0;direction<4;direction++){
+                const nx=x+(direction===0?-1:direction===1?1:0),ny=y+(direction===2?-1:direction===3?1:0);
+                if(nx<0||ny<0||nx>=w||ny>=h)continue;const next=ny*w+nx;
+                if(!seen[next]&&white(next)){seen[next]=1;queue[tail++]=next;}
+            }
+        }
+        const bw=maxX-minX+1,bh=maxY-minY+1,cx=(minX+maxX)/2,cy=(minY+maxY)/2;
+        if(border||bw<7||bh<7||bw>70||bh>70||tail<25||tail/(bw*bh)<.3||tail/(bw*bh)>.75)continue;
+        if(boxes.some(b=>cx>=b.x-5&&cx<=b.x+b.width+5&&cy>=b.y-5&&cy<=b.y+b.height+5))continue;
+        const rows=new Array(bh).fill(0),cols=new Array(bw).fill(0);
+        for(let i=0;i<tail;i++){rows[Math.floor(queue[i]/w)-minY]++;cols[queue[i]%w-minX]++;}
+        const peak=values=>{const max=Math.max(...values),indices=values.map((v,i)=>v>=max*.9?i:-1).filter(i=>i>=0);return indices.reduce((a,b)=>a+b,0)/indices.length/(values.length-1);};
+        const px=peak(cols),py=peak(rows),middle=v=>v>.28&&v<.72;
+        let kind=null;
+        if(middle(px)&&middle(py))kind='hollowDiamond';
+        else if((middle(px)&&(py<.2||py>.8))||(middle(py)&&(px<.2||px>.8)))kind='hollowTriangle';
+        if(!kind)continue;
+        const distances=boxes.map((b,i)=>({index:i,d:Math.hypot(Math.max(b.x-5-cx,0,cx-b.x-b.width-5),Math.max(b.y-5-cy,0,cy-b.y-b.height-5))})).sort((a,b)=>a.d-b.d);
+        if(!distances.length||distances[0].d>25)continue;
+        if(distances[1]&&distances[1].d-distances[0].d<5)continue;
+        markers.push({kind,box:distances[0].index,x:cx,y:cy});
+    }
+    return markers;
 }
 async function photoCanvas(file) {
     const bitmap=await createImageBitmap(file);
@@ -274,7 +314,9 @@ async function recognizeLocalPhoto(file) {
             if(name)blocks.push(name.replace(/\n/g,' ')+'\n'+(attrs+'\n'+methods).split('\n').map(line=>line.trim()).filter(Boolean).join('\n'));
         }
         update('Lectura terminada; revisa las clases antes de importar.',100);
-        return {text:blocks.join('\n\n'),structured:true,count:blocks.length,names,...detectPhotoConnections(canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height),boxes)};
+        const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);
+        const markers=detectPhotoMarkers(pixels,boxes);
+        return {text:blocks.join('\n\n'),structured:true,count:blocks.length,names,markers,...detectPhotoConnections(pixels,boxes,markers)};
     } finally {
         await worker.terminate();
     }

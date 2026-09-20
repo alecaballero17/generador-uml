@@ -1768,20 +1768,13 @@ $('#btnProcessPhoto').addEventListener('click', async () => {
         state.detectedPhotoConnections = null;
         const photo = await recognizeLocalPhoto(state.pendingPhotoFile);
         const plans = reviewPhotoText(photo.text);
-        if(!plans.length)throw new Error('No se reconocieron clases válidas. Prueba una imagen más nítida.');
-        const diagram = new UMLModel();
-        diagram.name = state.model.name;
-        plans.forEach((plan,index)=>{
-            const cls=new UMLClassNode(plan.name,60+(index%3)*260,60+Math.floor(index/3)*300);
-            plan.attributes.forEach(attr=>cls.addAttribute({...attr,id:crypto.randomUUID()}));
-            (plan.operations||[]).forEach(op=>cls.addOperation({...op,id:crypto.randomUUID()}));
-            diagram.addClass(cls);
-        });
+        const diagram = buildPhotoDiagram(photo.text);
         const result={diagram:diagram.toJSON(),detectedClassCount:plans.length,detectedRelationshipCount:0,
             warnings:['Revisa nombres y tipos antes de aceptar. Los tipos ausentes usan valores predeterminados. Las conexiones son propuestas y todavía no se incorporan automáticamente.'],
-            reviewNotes:plans.map(p=>`${p.name}: ${p.attributes.map(a=>a.name).join(', ')}; métodos: ${(p.operations||[]).map(o=>o.name+'()').join(', ') || 'ninguno'}`)};
+            reviewNotes:plans.map(p=>`${p.name}: ${p.attributes.map(a=>a.name).join(', ')}; métodos: ${(p.operations||[]).map(o=>o.name+'('+(o.parameters||[]).map(p=>p.name+': '+p.type).join(', ')+')').join(', ') || 'ninguno'}`)};
         for(const pair of photo.connections||[])result.reviewNotes.push('Conexión candidata: '+pair.map(i=>photo.names[i]).join(' ↔ '));
         for(const group of photo.ambiguous||[])result.reviewNotes.push('Cruce por resolver: '+group.map(i=>photo.names[i]).join(', '));
+        for(const marker of photo.markers||[])result.reviewNotes.push((marker.kind==='hollowDiamond' ? 'Rombo vacío, posible agregación junto a ' : 'Triángulo vacío, posible herencia o realización junto a ')+photo.names[marker.box]+'. Revisa la línea antes de confirmar.');
         state.detectedDiagram = result.diagram;
         state.detectedPhotoConnections = photo;
 
@@ -1812,6 +1805,9 @@ $('#btnProcessPhoto').addEventListener('click', async () => {
             notesHtml += '<ul>' + result.reviewNotes.map(n => `<li>${escapeHTML(n)}</li>`).join('') + '</ul>';
         }
         notes.innerHTML = notesHtml;
+        let edit=document.getElementById('webPhotoText');
+        if(!edit){const label=document.createElement('label');label.textContent='Revisar y corregir texto antes de importar';edit=document.createElement('textarea');edit.id='webPhotoText';edit.rows=12;edit.style.width='100%';label.append(edit);notes.after(label);}
+        edit.value=photo.text;
 
         showToast(`Interpretación completada: ${result.detectedClassCount} clases encontradas`, 'success');
     } catch (err) {
@@ -1825,8 +1821,10 @@ $('#btnProcessPhoto').addEventListener('click', async () => {
 $('#btnAcceptPhotoDiagram').addEventListener('click', () => {
     if (!state.detectedDiagram) return;
     if(collaborationState.role==='viewer'){showToast('Este enlace es de solo lectura','warning');return;}
+    let reviewed;
+    try { reviewed=buildPhotoDiagram(document.getElementById('webPhotoText').value); } catch(error){showToast(error.message,'error');return;}
     saveUndo();
-    state.model = UMLModel.fromJSON(state.detectedDiagram);
+    state.model = reviewed;
     state.classCounter = state.model.classes.length + 1;
     $('#projectName').value = state.model.name;
     state.selectedId = null;

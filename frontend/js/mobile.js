@@ -180,7 +180,7 @@ function refreshMobileCards() {
 
         const operationsList = document.createElement('div');
         for (const operation of cls.operations || []) {
-            const row=document.createElement('p');row.textContent=`${operation.visibility || '+'} ${operation.name}() : ${operation.returnType || 'void'}`;
+            const row=document.createElement('p');row.textContent=`${operation.visibility || '+'} ${operation.name}(${(operation.parameters||[]).map(p=>p.name+': '+p.type).join(', ')}) : ${operation.returnType || 'void'}`;
             operationsList.append(row);
         }
         card.append(header, attrsList, operationsList, addAttrBtn);
@@ -188,6 +188,19 @@ function refreshMobileCards() {
     }
 }
 
+function buildPhotoDiagram(text) {
+    const plans=reviewPhotoText(text);
+    if(!plans.length)throw new Error('No se reconocieron clases válidas. Revisa el texto.');
+    if(new Set(plans.map(p=>p.name.toLowerCase())).size!==plans.length)throw new Error('Hay nombres de clases repetidos.');
+    const diagram=new UMLModel();diagram.name=state.model.name;
+    plans.forEach((plan,index)=>{
+        const cls=new UMLClassNode(plan.name,60+(index%3)*260,60+Math.floor(index/3)*300);
+        plan.attributes.forEach(attr=>cls.addAttribute({...attr,id:crypto.randomUUID()}));
+        (plan.operations||[]).forEach(op=>cls.addOperation({...op,id:crypto.randomUUID()}));
+        diagram.addClass(cls);
+    });
+    return diagram;
+}
 function reviewPhotoText(text) {
     let clean = text.replace(/\bcddigo\b/gi, 'codigo')
                     .replace(/\bcod1go\b/gi, 'codigo')
@@ -201,13 +214,20 @@ function reviewPhotoText(text) {
         try {
             const name = UMLCommands.identifier(lines.shift(), true);
             const attributes = lines.filter(line => !line.includes('(')).map(line => {
-                try { const visibility = /^[+\-#~]/.test(line) ? line[0] : '-'; const attribute = UMLCommands.attributes(line.replace(/^[+\-#~]\s*/, ''))[0]; return attribute ? {...attribute, visibility} : null; } catch (e) { return null; }
+                const visibility = /^[+\-#~]/.test(line) ? line[0] : '-'; const parsed = UMLCommands.attributes(line.replace(/^[+\-#~]\s*/, '')); if(parsed.length!==1)throw new Error('Revisa el atributo: '+line); return {...parsed[0], visibility};
             }).filter(Boolean);
+            if(new Set(attributes.map(a=>a.name.toLowerCase())).size!==attributes.length)throw new Error('Atributos repetidos en '+name);
             if (!attributes.length && /^(ejemplo|diagrama)/i.test(name)) return null;
             const operations = lines.filter(line => line.includes('(')).map(line => {
-                const match = line.match(/^([+\-#~])?\s*([\p{L}_][\p{L}\p{N}_ ]*)\(\s*\)\s*(?::\s*([\w]+))?$/u);
+                const match = line.match(/^([+\-#~])?\s*([\p{L}_][\p{L}\p{N}_ ]*)\(([^()]*)\)\s*(?::\s*([\w]+(?:\[\])?))?$/u);
                 if (!match) throw new Error('Revisa la firma del método: ' + line);
-                return {name:UMLCommands.identifier(match[2]),visibility:match[1] || '+',parameters:[],returnType:match[3] || 'void',isAbstract:false,isStatic:false,isConstructor:false};
+                const parameters=match[3].trim() ? match[3].split(',').map(raw=>{
+                    const parameter=raw.trim().match(/^([\p{L}_][\p{L}\p{N}_]*)\s*:\s*([\p{L}_][\p{L}\p{N}_]*(?:\[\])?)$/u);
+                    if(!parameter)throw new Error('Parámetro inválido; usa nombre: Tipo en ' + line);
+                    return {name:parameter[1],type:parameter[2]};
+                }) : [];
+                if(new Set(parameters.map(p=>p.name)).size!==parameters.length)throw new Error('Parámetros repetidos en ' + line);
+                return {name:UMLCommands.identifier(match[2]),visibility:match[1] || '+',parameters,returnType:match[4] || 'void',isAbstract:false,isStatic:false,isConstructor:false};
             });
             return { action: 'createClass', name, attributes, operations };
         } catch (e) {
@@ -496,15 +516,15 @@ function openMobileRelationship(candidate = null) {
     <label>Clase de origen<select name="source"></select></label>
     <label>Clase de destino<select name="target"></select></label>
     <label>Relación<select name="type"><option value="association">Asociación</option><option value="generalization">Herencia</option><option value="aggregation">Agregación</option><option value="composition">Composición</option><option value="dependency">Dependencia</option><option value="realization">Implementa interfaz</option></select></label>
-    <label>Multiplicidad de origen<select name="sourceMult"><option>1</option><option>0..1</option><option>0..*</option><option>1..*</option></select></label>
-    <label>Multiplicidad de destino<select name="targetMult"><option>0..*</option><option>1</option><option>0..1</option><option>1..*</option></select></label>
+    <label>Multiplicidad de origen<select name="sourceMult"><option value="">Sin especificar</option><option>1</option><option>0..1</option><option>0..*</option><option>1..*</option></select></label>
+    <label>Multiplicidad de destino<select name="targetMult"><option value="">Sin especificar</option><option>0..*</option><option>1</option><option>0..1</option><option>1..*</option></select></label>
     <p role="alert"></p><button type="button">Cancelar</button><button type="submit" class="btn-primary">Guardar relación</button></form>`;
     const form=dialog.querySelector('form');
     for(const cls of state.model.classes)for(const name of ['source','target']){
         const option=document.createElement('option');option.value=cls.id;option.textContent=cls.name;form.elements[name].append(option);
     }
     if(state.model.classes.length>1)form.elements.target.selectedIndex=1;
-    if(candidate?.source && candidate?.target){form.elements.source.value=candidate.source;form.elements.target.value=candidate.target;}
+    if(candidate?.source && candidate?.target){form.elements.source.value=candidate.source;form.elements.target.value=candidate.target;if(candidate.type)form.elements.type.value=candidate.type;}
     const updateMultiplicity=()=>{const enabled=['association','aggregation','composition'].includes(form.elements.type.value);form.elements.sourceMult.disabled=!enabled;form.elements.targetMult.disabled=!enabled;};
     form.elements.type.onchange=updateMultiplicity;updateMultiplicity();
     dialog.querySelector('button[type=button]').onclick=()=>{dialog.close();dialog.remove();};
@@ -522,7 +542,9 @@ function openMobileRelationship(candidate = null) {
             if(type==='realization'&&!state.model.getClass(target).isInterface)throw new Error('El destino debe ser una interfaz.');
             if(state.model.relationships.some(r=>r.type===type&&r.source.classId===source&&r.target.classId===target))throw new Error('Esta relación ya existe.');
             saveUndo();const relation=new UMLRelNode(type,source,target);
-            relation.source.multiplicity=form.elements.sourceMult.value;relation.target.multiplicity=form.elements.targetMult.value;
+            const hasMultiplicity=['association','aggregation','composition'].includes(type);
+            relation.source.multiplicity=hasMultiplicity ? form.elements.sourceMult.value || null : null;
+            relation.target.multiplicity=hasMultiplicity ? form.elements.targetMult.value || null : null;
             state.model.addRelationship(relation);renderAll();persistCollaboration();broadcastChange();refreshMobileCards();
             showToast('Relación guardada en el diagrama','success');dialog.close();dialog.remove();
         }catch(error){dialog.querySelector('[role=alert]').textContent=error.message;}
@@ -536,10 +558,17 @@ function renderPhotoConnections(result, container = null) {
     const section=document.createElement('section');section.id='photoConnectionsReview';
     const title=document.createElement('h3');title.textContent='Conexiones de la foto: revisar';section.append(title);
     const note=document.createElement('p');note.textContent='Son propuestas. Confirma el tipo, la dirección y las multiplicidades mirando la foto. No se agregan automáticamente.';section.append(note);
+    for(const marker of result.markers||[]){
+        const hint=document.createElement('p');
+        hint.textContent=marker.kind==='hollowDiamond' ? `Rombo vacío junto a ${result.names[marker.box]}: posible agregación; revisa a qué clase llega la línea.` : `Triángulo vacío junto a ${result.names[marker.box]}: posible herencia o realización; revisa las clases de origen y si la línea es continua.`;
+        section.append(hint);
+    }
     const find=index=>{const name=UMLCommands.identifier(result.names[index],true);return state.model.classes.find(c=>c.name.toLowerCase()===name.toLowerCase());};
     for(const pair of result.connections||[]){
         const button=document.createElement('button');button.type='button';button.textContent=pair.map(i=>result.names[i]).join(' ↔ ');button.className='btn';
-        button.onclick=()=>{try{const source=find(pair[0]),target=find(pair[1]);if(!source||!target)throw new Error('Importa primero las clases o comprueba sus nombres.');openMobileRelationship({source:source.id,target:target.id});}catch(error){note.textContent=error.message;}};
+        const suggestion=(result.suggestions||[]).find(s=>pair.includes(s.source)&&pair.includes(s.target));
+        if(suggestion)button.textContent+=' — posible agregación';
+        button.onclick=()=>{try{const source=find(suggestion?suggestion.source:pair[0]),target=find(suggestion?suggestion.target:pair[1]);if(!source||!target)throw new Error('Importa primero las clases o comprueba sus nombres.');openMobileRelationship({source:source.id,target:target.id,type:suggestion?.type});}catch(error){note.textContent=error.message;}};
         section.append(button);
     }
     const manual=document.createElement('button');manual.type='button';manual.className='btn';manual.textContent='Conectar clases manualmente';manual.onclick=()=>openMobileRelationship();section.append(manual);
