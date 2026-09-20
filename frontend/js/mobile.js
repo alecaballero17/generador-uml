@@ -584,33 +584,61 @@ function openMobileRelationship(candidate = null) {
 
 function renderPhotoConnections(result, container = null) {
     document.getElementById('photoConnectionsReview')?.remove();
-    if(!result.connections?.length&&!result.ambiguous?.length)return;
+    if(!result.connections?.length&&!result.ambiguous?.length&&!(result.markers||[]).length)return;
     const section=document.createElement('section');section.id='photoConnectionsReview';
-    const title=document.createElement('h3');title.textContent='Conexiones de la foto: revisar';section.append(title);
-    const note=document.createElement('p');note.textContent='Son propuestas. Confirma el tipo, la dirección y las multiplicidades mirando la foto. No se agregan automáticamente.';section.append(note);
+    section.style.cssText='margin-top:12px;padding:10px;border:1px solid #334155;border-radius:8px;background:#0f172a;';
+    const title=document.createElement('h3');title.textContent='Conexiones detectadas en la foto';title.style.cssText='margin:0 0 8px;font-size:15px;color:#e2e8f0;';section.append(title);
+    const note=document.createElement('p');note.textContent='Son propuestas. Confirma el tipo, la dirección y las multiplicidades mirando la foto. No se agregan automáticamente.';note.style.cssText='font-size:12px;color:#94a3b8;margin:0 0 10px;';section.append(note);
     const find=index=>{const name=UMLCommands.identifier(result.names[index],true);return state.model.classes.find(c=>c.name.toLowerCase()===name.toLowerCase());};
     for(const marker of result.markers||[]){
-        const hint=document.createElement('p');
+        const hint=document.createElement('div');
+        hint.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;margin-bottom:6px;background:#1e293b;border-radius:6px;font-size:13px;';
         const targetCls = find(marker.box);
         if(marker.kind==='hollowTriangle' && targetCls){
-            hint.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px;';
-            hint.innerHTML=`<span>Triángulo junto a <strong>${targetCls.name}</strong> (posible herencia hacia ${targetCls.name})</span>`;
-            const btn=document.createElement('button');btn.type='button';btn.className='btn btn-sm';btn.textContent=`Conectar hijo → ${targetCls.name}`;
-            btn.onclick=()=>openMobileRelationship({target:targetCls.id,type:'generalization'});
-            hint.append(btn);
+            hint.innerHTML=`<span style="flex:1;">△ Triángulo junto a <strong>${targetCls.name}</strong></span>`;
+            const btnGroup=document.createElement('div');btnGroup.style.cssText='display:flex;gap:4px;';
+            const btnInherit=document.createElement('button');btnInherit.type='button';btnInherit.className='btn btn-sm';btnInherit.textContent=`Herencia → ${targetCls.name}`;btnInherit.style.fontSize='11px';
+            btnInherit.onclick=()=>openMobileRelationship({target:targetCls.id,type:'generalization'});
+            const btnRealize=document.createElement('button');btnRealize.type='button';btnRealize.className='btn btn-sm';btnRealize.textContent=`Realización → ${targetCls.name}`;btnRealize.style.cssText='font-size:11px;border-color:#818cf8;';
+            btnRealize.onclick=()=>openMobileRelationship({target:targetCls.id,type:'realization'});
+            btnGroup.append(btnInherit,btnRealize);
+            hint.append(btnGroup);
+        } else if(marker.kind==='hollowDiamond') {
+            hint.innerHTML=`<span style="flex:1;">◇ Rombo vacío junto a <strong>${result.names[marker.box]}</strong>: posible agregación</span>`;
+            if(targetCls){
+                const btn=document.createElement('button');btn.type='button';btn.className='btn btn-sm';btn.textContent='Agregar agregación';btn.style.fontSize='11px';
+                btn.onclick=()=>openMobileRelationship({target:targetCls.id,type:'aggregation'});
+                hint.append(btn);
+            }
         } else {
-            hint.textContent=marker.kind==='hollowDiamond' ? `Rombo vacío junto a ${result.names[marker.box]}: posible agregación; revisa a qué clase llega la línea.` : `Triángulo vacío junto a ${result.names[marker.box]}: posible herencia o realización; revisa las clases de origen y si la línea es continua.`;
+            hint.textContent=`Marcador ${marker.kind} junto a ${result.names[marker.box]}: revisa las clases de origen.`;
         }
         section.append(hint);
     }
     for(const pair of result.connections||[]){
-        const button=document.createElement('button');button.type='button';button.textContent=pair.map(i=>result.names[i]).join(' ↔ ');button.className='btn';
+        const wrapper=document.createElement('div');wrapper.style.cssText='display:flex;align-items:center;gap:6px;margin-bottom:4px;';
+        const button=document.createElement('button');button.type='button';button.className='btn';button.style.cssText='flex:1;font-size:12px;text-align:left;padding:6px 10px;';
+        let label=pair.map(i=>result.names[i]).join(' ↔ ');
         const suggestion=(result.suggestions||[]).find(s=>pair.includes(s.source)&&pair.includes(s.target));
-        if(suggestion)button.textContent+=` — posible ${suggestion.type==='aggregation'?'agregación':suggestion.type}`;
+        if(suggestion){
+            const typeLabels={aggregation:'agregación',composition:'composición',generalization:'herencia',realization:'realización'};
+            label+=` — posible ${typeLabels[suggestion.type]||suggestion.type}`;
+            if(suggestion.sourceMult||suggestion.targetMult) label+=` (${suggestion.sourceMult||'?'}..${suggestion.targetMult||'?'})`;
+        }
+        button.textContent=label;
         button.onclick=()=>{try{const source=find(suggestion?suggestion.source:pair[0]),target=find(suggestion?suggestion.target:pair[1]);if(!source||!target)throw new Error('Importa primero las clases o comprueba sus nombres.');openMobileRelationship({source:source.id,target:target.id,type:suggestion?.type,sourceMult:suggestion?.sourceMult,targetMult:suggestion?.targetMult});}catch(error){note.textContent=error.message;}};
-        section.append(button);
+        wrapper.append(button);
+        section.append(wrapper);
     }
-    const manual=document.createElement('button');manual.type='button';manual.className='btn';manual.textContent='Conectar clases manualmente';manual.onclick=()=>openMobileRelationship();section.append(manual);
-    for(const group of result.ambiguous||[]){const text=document.createElement('p');text.textContent='Cruce o ramificación por resolver: '+group.map(i=>result.names[i]).join(', ')+'. Usa Conectar clases para indicar cada relación.';section.append(text);}
+    if(result.ambiguous?.length){
+        const ambTitle=document.createElement('h4');ambTitle.textContent='Cruces y ramificaciones';ambTitle.style.cssText='margin:10px 0 4px;font-size:13px;color:#fbbf24;';section.append(ambTitle);
+        for(const group of result.ambiguous){
+            const text=document.createElement('p');text.style.cssText='font-size:12px;color:#fbbf24;padding:4px 8px;background:#1e293b;border-radius:4px;border-left:3px solid #f59e0b;margin:4px 0;';
+            text.textContent='⚠ Cruce o ramificación: '+group.map(i=>result.names[i]).join(', ')+'. Usa «Conectar clases» para cada relación.';
+            section.append(text);
+        }
+    }
+    const manual=document.createElement('button');manual.type='button';manual.className='btn';manual.textContent='+ Conectar clases manualmente';manual.style.cssText='margin-top:8px;width:100%;font-size:12px;';manual.onclick=()=>openMobileRelationship();section.append(manual);
     (container || document.getElementById('mobilePhotoReview')).append(section);
 }
+

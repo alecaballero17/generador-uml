@@ -597,19 +597,6 @@ public class GlobalExceptionHandler {{
         rel_fields = self._generate_relationship_fields(cls, extra_imports)
         fields.extend(rel_fields)
 
-        # Build imports string
-        import_lines = []
-        for imp in sorted(imports):
-            import_lines.append(f"import {imp};")
-        for imp in sorted(extra_imports):
-            import_lines.append(f"import {imp};")
-        import_lines.append("")
-
-        extends_clause = ""
-        if parent_classes:
-            parent_name = to_pascal_case(parent_classes[0].name)
-            extends_clause = f" extends {parent_name}"
-
         # Interface implementations
         implements_list = []
         for rel in self.diagram.relationships:
@@ -622,6 +609,25 @@ public class GlobalExceptionHandler {{
         implements_clause = ""
         if implements_list:
             implements_clause = f" implements {', '.join(implements_list)}"
+
+        # Generate UML operations
+        operations = self._generate_operations(cls, implements_list, extra_imports)
+        operations_block = ""
+        if operations:
+            operations_block = "\n    // Métodos de operaciones UML\n" + "\n\n".join(operations) + "\n"
+
+        # Build imports string
+        import_lines = []
+        for imp in sorted(imports):
+            import_lines.append(f"import {imp};")
+        for imp in sorted(extra_imports):
+            import_lines.append(f"import {imp};")
+        import_lines.append("")
+
+        extends_clause = ""
+        if parent_classes:
+            parent_name = to_pascal_case(parent_classes[0].name)
+            extends_clause = f" extends {parent_name}"
 
         abstract_kw = "abstract " if cls.is_abstract else ""
 
@@ -661,8 +667,67 @@ import java.util.HashSet;
 public {abstract_kw}class {class_name}{extends_clause}{implements_clause} {{
 {id_field}
 {chr(10).join(fields)}
-}}
+{operations_block}}}
 """
+
+    def _generate_operations(self, cls: UMLClass, implements_list: list[str], extra_imports: set) -> list[str]:
+        """Generate Java method stubs for UML operations in an entity class."""
+        methods = []
+        interface_op_names = set()
+        for iface_name in implements_list:
+            for c in self.diagram.classes:
+                if to_pascal_case(c.name) == iface_name:
+                    for op in c.operations:
+                        interface_op_names.add(op.name)
+
+        for op in cls.operations:
+            return_type = get_java_type(op.return_type, self.diagram) if op.return_type else "void"
+            for imp in get_java_imports_for_type(return_type):
+                extra_imports.add(imp)
+
+            param_parts = []
+            for p in op.parameters:
+                p_type = get_java_type(p.type, self.diagram)
+                for imp in get_java_imports_for_type(p_type):
+                    extra_imports.add(imp)
+                param_parts.append(f"{p_type} {to_camel_case(p.name)}")
+            params = ", ".join(param_parts)
+
+            vis = "public"
+            if hasattr(op, "visibility") and op.visibility:
+                if op.visibility == Visibility.PRIVATE:
+                    vis = "private"
+                elif op.visibility == Visibility.PROTECTED:
+                    vis = "protected"
+                elif op.visibility == Visibility.PACKAGE:
+                    vis = ""
+
+            static_kw = "static " if getattr(op, "is_static", False) else ""
+            override_ann = "    @Override\n" if op.name in interface_op_names else ""
+
+            if cls.is_abstract and getattr(op, "is_abstract", False):
+                methods.append(f"{override_ann}    {vis} abstract {static_kw}{return_type} {op.name}({params});".strip())
+            else:
+                if return_type == "void":
+                    body = "        // Regla de negocio UML\n        // TODO: Implementar lógica personalizada\n"
+                elif return_type in ("int", "Integer", "Short", "Byte", "Long", "long"):
+                    body = "        return 0;\n"
+                elif return_type in ("double", "Double", "float", "Float"):
+                    body = "        return 0.0;\n"
+                elif return_type == "BigDecimal":
+                    body = "        return java.math.BigDecimal.ZERO;\n"
+                elif return_type in ("boolean", "Boolean"):
+                    body = "        return false;\n"
+                elif return_type == "String":
+                    body = '        return "";\n'
+                else:
+                    body = f'        throw new UnsupportedOperationException("Operación UML {op.name} no implementada");\n'
+
+                methods.append(f"""{override_ann}    {vis} {static_kw}{return_type} {op.name}({params}) {{
+{body}    }}""")
+
+        return methods
+
 
     def _compute_field_name_for_side(self, rel: UMLRelationship, side: str) -> str:
         """Compute the Java field name that will be generated for a given side of a relationship.
@@ -1105,6 +1170,37 @@ logging.level.org.hibernate.SQL=DEBUG
 logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
 """
 
+    def _get_ordered_classes(self) -> list[UMLClass]:
+        """Return classes sorted topologically so parents appear before children."""
+        classes = [c for c in self.diagram.classes if not c.is_interface]
+        class_map = {c.id: c for c in classes}
+
+        parents_map = {}
+        for c in classes:
+            parent_classes = self.diagram.get_parent_classes(c.id)
+            parents_map[c.id] = [p.id for p in parent_classes if p.id in class_map]
+
+        ordered = []
+        visited = set()
+        visiting = set()
+
+        def visit(cls_id):
+            if cls_id in visited or cls_id not in class_map:
+                return
+            if cls_id in visiting:
+                return
+            visiting.add(cls_id)
+            for p_id in parents_map.get(cls_id, []):
+                visit(p_id)
+            visiting.remove(cls_id)
+            visited.add(cls_id)
+            ordered.append(class_map[cls_id])
+
+        for c in classes:
+            visit(c.id)
+
+        return ordered
+
     def _generate_sql_schema(self) -> str:
         """Genera el script SQL de creación de tablas PostgreSQL (DDL)."""
         sql_types = {
@@ -1145,49 +1241,126 @@ logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
         ]
 
         class_map = {c.id: c for c in self.diagram.classes}
+        ordered_classes = self._get_ordered_classes()
 
-        # First generate tables
-        for cls in self.diagram.classes:
-            if cls.is_interface:
-                continue
+        # Generar tablas para cada clase ordenada (padres antes que hijos)
+        for cls in ordered_classes:
             table_name = to_snake_case(cls.name)
             lines.append(f"-- Tabla: {table_name}")
             lines.append(f"CREATE TABLE IF NOT EXISTS {table_name} (")
-            col_defs = ["    id BIGSERIAL PRIMARY KEY"]
+
+            parent_classes = self.diagram.get_parent_classes(cls.id)
+            if parent_classes:
+                parent_table = to_snake_case(parent_classes[0].name)
+                col_defs = [f"    id BIGINT PRIMARY KEY REFERENCES {parent_table}(id) ON DELETE CASCADE"]
+            else:
+                col_defs = ["    id BIGSERIAL PRIMARY KEY", "    version BIGINT DEFAULT 0"]
 
             for attr in cls.attributes:
-                if attr.name.lower() == "id":
+                if attr.name.lower() in ("id", "version"):
+                    continue
+                # Si el atributo está en la clase padre, no duplicar columna en tabla hija
+                if parent_classes and any(attr.name.lower() == pa.name.lower() for p in parent_classes for pa in p.attributes):
                     continue
                 col_name = to_snake_case(attr.name)
                 col_type = sql_types.get(attr.type, "VARCHAR(255)")
-                col_defs.append(f"    {col_name} {col_type}")
+                nullable = " NOT NULL" if (attr.multiplicity == "1" or "NotNull" in str(attr.constraints)) else ""
+                col_defs.append(f"    {col_name} {col_type}{nullable}")
 
-            # Foreign keys from relationships where this class is target (child/dependent)
+            # Claves foráneas según mapeo JPA (@JoinColumn)
             for rel in self.diagram.relationships:
-                if rel.target.class_id == cls.id and rel.type in (
-                    RelationshipType.COMPOSITION,
-                    RelationshipType.ASSOCIATION,
-                    RelationshipType.AGGREGATION,
-                ):
-                    src_cls = class_map.get(rel.source.class_id)
-                    if src_cls:
-                        fk_col = f"{to_snake_case(src_cls.name)}_id"
-                        on_delete = "CASCADE" if rel.type == RelationshipType.COMPOSITION else "SET NULL"
-                        col_defs.append(f"    {fk_col} BIGINT REFERENCES {to_snake_case(src_cls.name)}(id) ON DELETE {on_delete}")
+                if rel.type in (RelationshipType.GENERALIZATION, RelationshipType.REALIZATION, RelationshipType.DEPENDENCY):
+                    continue
+
+                src_is_many = rel.source.multiplicity in ("*", "0..*", "1..*")
+                tgt_is_many = rel.target.multiplicity in ("*", "0..*", "1..*")
+
+                # Composición / Agregación: la tabla destino tiene FK al padre
+                if rel.type in (RelationshipType.COMPOSITION, RelationshipType.AGGREGATION):
+                    if rel.target.class_id == cls.id:
+                        src_cls = class_map.get(rel.source.class_id)
+                        if src_cls:
+                            fk_col = f"{to_snake_case(src_cls.name)}_id"
+                            on_del = "CASCADE" if rel.type == RelationshipType.COMPOSITION else "SET NULL"
+                            col_defs.append(f"    {fk_col} BIGINT REFERENCES {to_snake_case(src_cls.name)}(id) ON DELETE {on_del}")
+
+                # Asociación 1:1: el origen posee la FK
+                elif not src_is_many and not tgt_is_many:
+                    if rel.source.class_id == cls.id:
+                        tgt_cls = class_map.get(rel.target.class_id)
+                        if tgt_cls:
+                            fk_col = f"{to_snake_case(tgt_cls.name)}_id"
+                            col_defs.append(f"    {fk_col} BIGINT REFERENCES {to_snake_case(tgt_cls.name)}(id) ON DELETE SET NULL")
+
+                # Asociación 1:N: el lado 'muchos' posee la FK
+                elif tgt_is_many and not src_is_many:
+                    if rel.target.class_id == cls.id:
+                        src_cls = class_map.get(rel.source.class_id)
+                        if src_cls:
+                            fk_col = f"{to_snake_case(src_cls.name)}_id"
+                            col_defs.append(f"    {fk_col} BIGINT REFERENCES {to_snake_case(src_cls.name)}(id) ON DELETE SET NULL")
+                elif src_is_many and not tgt_is_many:
+                    if rel.source.class_id == cls.id:
+                        tgt_cls = class_map.get(rel.target.class_id)
+                        if tgt_cls:
+                            fk_col = f"{to_snake_case(tgt_cls.name)}_id"
+                            col_defs.append(f"    {fk_col} BIGINT REFERENCES {to_snake_case(tgt_cls.name)}(id) ON DELETE SET NULL")
 
             lines.append(",\n".join(col_defs))
             lines.append(");")
             lines.append("")
 
-        # Create indexes for foreign keys
-        lines.append("-- Índices de optimización para Claves Foráneas")
+        # Tablas intermedias para relaciones Muchos a Muchos
+        lines.append("-- Tablas intermedias para relaciones Muchos a Muchos")
         for rel in self.diagram.relationships:
-            if rel.type in (RelationshipType.COMPOSITION, RelationshipType.ASSOCIATION, RelationshipType.AGGREGATION):
-                src_cls = class_map.get(rel.source.class_id)
-                tgt_cls = class_map.get(rel.target.class_id)
-                if src_cls and tgt_cls and not tgt_cls.is_interface:
-                    fk_col = f"{to_snake_case(src_cls.name)}_id"
-                    tgt_table = to_snake_case(tgt_cls.name)
+            if rel.type == RelationshipType.ASSOCIATION:
+                src_is_many = rel.source.multiplicity in ("*", "0..*", "1..*")
+                tgt_is_many = rel.target.multiplicity in ("*", "0..*", "1..*")
+                if src_is_many and tgt_is_many:
+                    src_cls = class_map.get(rel.source.class_id)
+                    tgt_cls = class_map.get(rel.target.class_id)
+                    if src_cls and tgt_cls:
+                        src_tbl = to_snake_case(src_cls.name)
+                        tgt_tbl = to_snake_case(tgt_cls.name)
+                        join_tbl = f"{src_tbl}_{tgt_tbl}"
+                        lines.append(f"CREATE TABLE IF NOT EXISTS {join_tbl} (")
+                        lines.append(f"    {src_tbl}_id BIGINT NOT NULL REFERENCES {src_tbl}(id) ON DELETE CASCADE,")
+                        lines.append(f"    {tgt_tbl}_id BIGINT NOT NULL REFERENCES {tgt_tbl}(id) ON DELETE CASCADE,")
+                        lines.append(f"    PRIMARY KEY ({src_tbl}_id, {tgt_tbl}_id)")
+                        lines.append(");")
+                        lines.append(f"CREATE INDEX IF NOT EXISTS idx_{join_tbl}_{src_tbl}_id ON {join_tbl}({src_tbl}_id);")
+                        lines.append(f"CREATE INDEX IF NOT EXISTS idx_{join_tbl}_{tgt_tbl}_id ON {join_tbl}({tgt_tbl}_id);")
+                        lines.append("")
+
+        # Índices de optimización para Claves Foráneas
+        lines.append("-- Índices de optimización para Claves Foráneas")
+        for cls in ordered_classes:
+            tgt_table = to_snake_case(cls.name)
+            for rel in self.diagram.relationships:
+                if rel.type in (RelationshipType.GENERALIZATION, RelationshipType.REALIZATION, RelationshipType.DEPENDENCY):
+                    continue
+                src_is_many = rel.source.multiplicity in ("*", "0..*", "1..*")
+                tgt_is_many = rel.target.multiplicity in ("*", "0..*", "1..*")
+
+                fk_col = None
+                if rel.type in (RelationshipType.COMPOSITION, RelationshipType.AGGREGATION) and rel.target.class_id == cls.id:
+                    src_cls = class_map.get(rel.source.class_id)
+                    if src_cls:
+                        fk_col = f"{to_snake_case(src_cls.name)}_id"
+                elif not src_is_many and not tgt_is_many and rel.source.class_id == cls.id:
+                    tgt_cls = class_map.get(rel.target.class_id)
+                    if tgt_cls:
+                        fk_col = f"{to_snake_case(tgt_cls.name)}_id"
+                elif tgt_is_many and not src_is_many and rel.target.class_id == cls.id:
+                    src_cls = class_map.get(rel.source.class_id)
+                    if src_cls:
+                        fk_col = f"{to_snake_case(src_cls.name)}_id"
+                elif src_is_many and not tgt_is_many and rel.source.class_id == cls.id:
+                    tgt_cls = class_map.get(rel.target.class_id)
+                    if tgt_cls:
+                        fk_col = f"{to_snake_case(tgt_cls.name)}_id"
+
+                if fk_col:
                     idx_name = f"idx_{tgt_table}_{fk_col}"
                     lines.append(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {tgt_table}({fk_col});")
 

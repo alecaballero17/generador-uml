@@ -23,7 +23,7 @@ function savedCollaboration() {
     }
     return null;
 }
-const collaborationState = { base: null, revision: 0, token: null, role: 'admin', inflight: null, conflict: null, ready: false, reconnect: null, localSaveFailed: false };
+const collaborationState = { base: null, revision: 0, token: null, role: 'admin', inflight: null, conflict: null, ready: false, reconnect: null, localSaveFailed: false, pendingOffline: null, reconnectAttempts: 0 };
 const copyDiagram = value => JSON.parse(JSON.stringify(value));
 const stableDiagram = x => Array.isArray(x) ? x.map(stableDiagram) : x && typeof x === 'object' ? Object.fromEntries(Object.keys(x).sort().map(k=>[k,stableDiagram(x[k])])) : x;
 const sameDiagram = (a,b) => JSON.stringify(stableDiagram(a)) === JSON.stringify(stableDiagram(b));
@@ -49,24 +49,60 @@ function mergeDiagrams(base, local, remote, preferLocal = false, path = 'diagram
 }
 function syncBadge(text) { $('#collabStatus').textContent = text; }
 function offlineSyncMessage() {
-    return collaborationState.localSaveFailed ? 'Sin conexión · no se pudo guardar; no cierres la app' : 'Sin conexión · guardado local';
+    if (collaborationState.localSaveFailed) return 'Sin conexión · no se pudo guardar; no cierres la app';
+    const pending = collaborationState.pendingOffline ? ' · cambios pendientes' : '';
+    return `Sin conexión · guardado local${pending}`;
 }
 function refreshSyncBadge(participants) {
     if (collaborationState.localSaveFailed) return syncBadge('No se pudo guardar localmente; no cierres la app');
     if (collaborationState.conflict) return syncBadge('Conflicto: revisa tus cambios');
     if (collaborationState.inflight) return syncBadge('Guardando cambios…');
     if (collaborationState.role==='viewer') return syncBadge('Solo lectura');
+    if (collaborationState.pendingOffline) return syncBadge('Cambios pendientes · esperando conexión');
     if (!sameDiagram(state.model.toJSON(),collaborationState.base)) return syncBadge('Cambios pendientes de sincronizar');
     syncBadge(participants === undefined ? 'Sincronizado' : `${participants} participantes · edición`);
 }
 function persistCollaboration() {
     try {
-        localStorage.setItem(collaborationStorageKey(), JSON.stringify({base: collaborationState.base, revision: collaborationState.revision, token: collaborationState.token, diagram: state.model.toJSON()}));
+        const payload = {base: collaborationState.base, revision: collaborationState.revision, token: collaborationState.token, diagram: state.model.toJSON()};
+        if (collaborationState.pendingOffline) payload.pendingOffline = collaborationState.pendingOffline;
+        localStorage.setItem(collaborationStorageKey(), JSON.stringify(payload));
         if (!sameDiagram(state.model.toJSON(),collaborationState.base) || !localStorage.getItem(`collaboration_latest_${state.projectId}`)) localStorage.setItem(`collaboration_latest_${state.projectId}`,collaborationStorageKey());
         localStorage.setItem('last_collaboration_project',state.projectId);
         saveCurrentProjectToStorage();
         collaborationState.localSaveFailed=false;
     } catch (_) { collaborationState.localSaveFailed=true; syncBadge('No se pudo guardar localmente; no cierres la app'); }
+}
+function savePendingOffline() {
+    if (!collaborationState.base) return;
+    const diagram = copyDiagram(state.model.toJSON());
+    if (sameDiagram(diagram, collaborationState.base)) return;
+    collaborationState.pendingOffline = diagram;
+    persistCollaboration();
+}
+function restorePendingOffline() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(collaborationStorageKey()) || 'null');
+        if (saved?.pendingOffline) collaborationState.pendingOffline = saved.pendingOffline;
+    } catch (_) {}
+}
+function flushOfflineQueue() {
+    if (!collaborationState.pendingOffline || collaborationState.inflight || collaborationState.conflict) return;
+    if (collaborationState.role === 'viewer' || !collaborationState.base || state.ws?.readyState !== WebSocket.OPEN) return;
+    const pending = collaborationState.pendingOffline;
+    collaborationState.pendingOffline = null;
+    try {
+        const current = state.model.toJSON();
+        const merged = sameDiagram(current, pending) ? pending : mergeDiagrams(collaborationState.base, current, pending, true);
+        collaborationState.inflight = copyDiagram(merged);
+        state.ws.send(JSON.stringify({type:'update', revision:collaborationState.revision, diagram:merged}));
+        syncBadge('Enviando cambios pendientes…');
+    } catch (error) {
+        collaborationState.pendingOffline = pending;
+        collaborationState.inflight = null;
+        syncBadge('Error al fusionar cambios offline');
+    }
+    persistCollaboration();
 }
 function applySharedDiagram(diagram) {
     state.isRemoteUpdate = true;
@@ -121,7 +157,11 @@ function broadcastChange() {
     if (state.isRemoteUpdate) return;
     persistCollaboration();
     if (!collaborationState.ready || collaborationState.conflict) return;
-    if (collaborationState.role==='viewer' || collaborationState.inflight || !collaborationState.base || state.ws?.readyState!==WebSocket.OPEN) return;
+    if (collaborationState.role==='viewer' || collaborationState.inflight || !collaborationState.base) return;
+    if (state.ws?.readyState!==WebSocket.OPEN) {
+        savePendingOffline();
+        return;
+    }
     const diagram=copyDiagram(state.model.toJSON());
     if (sameDiagram(diagram,collaborationState.base)) return;
     collaborationState.inflight=diagram;
@@ -130,6 +170,7 @@ function broadcastChange() {
         syncBadge('Guardando cambios…');
     } catch(error) {
         collaborationState.inflight=null;
+        savePendingOffline();
         syncBadge(offlineSyncMessage());
         state.ws.close();
     }
@@ -157,12 +198,14 @@ async function initWebSocket() {
             history.replaceState(null,'',url);
         }
         collaborationState.ready=true;
+        collaborationState.reconnectAttempts=0;
+        restorePendingOffline();
         const isMobile = (location.host === 'appassets.androidplatform.net' || location.protocol === 'file:');
         const backendUrl = new URL(umlBackendOrigin());
         const wsHost = backendUrl.host;
         const protocol = backendUrl.protocol==='https:' ? 'wss:' : 'ws:';
         state.ws=new WebSocket(`${protocol}//${wsHost}/ws/collaboration/${encodeURIComponent(state.projectId)}`);
-        state.ws.onopen=()=>state.ws.send(JSON.stringify({token:collaborationState.token}));
+        state.ws.onopen=()=>{ state.ws.send(JSON.stringify({token:collaborationState.token})); };
         state.ws.onmessage=event=>{
             const msg=JSON.parse(event.data);
             if (msg.role) collaborationState.role=msg.role;
@@ -170,6 +213,7 @@ async function initWebSocket() {
             if (msg.type==='snapshot' || msg.type==='ack') {
                 handleSharedSnapshot(msg,msg.type==='ack');
                 refreshSyncBadge();
+                if (!collaborationState.inflight && !collaborationState.conflict) flushOfflineQueue();
             } else if (msg.type==='presence') refreshSyncBadge(msg.count);
             else if (msg.type==='conflict') showCollaborationConflict(msg,collaborationState.base,state.model.toJSON(),msg.message);
             else if (msg.type==='error') { collaborationState.inflight=null; showToast(msg.message,'error'); }
@@ -180,9 +224,13 @@ async function initWebSocket() {
             persistCollaboration();
         };
         state.ws.onclose=event=>{
-            collaborationState.inflight=null;
+            if (collaborationState.inflight) { savePendingOffline(); collaborationState.inflight=null; }
             syncBadge(event.code===4403?'Enlace sin permiso':offlineSyncMessage());
-            if (event.code!==4403) collaborationState.reconnect=setTimeout(initWebSocket,3000);
+            if (event.code!==4403) {
+                collaborationState.reconnectAttempts++;
+                const delay = Math.min(3000 * Math.pow(1.5, Math.min(collaborationState.reconnectAttempts, 8)), 30000);
+                collaborationState.reconnect=setTimeout(initWebSocket, delay);
+            }
         };
         state.ws.onerror=()=>syncBadge(offlineSyncMessage());
     } catch(error) {
@@ -266,11 +314,13 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.addEventListener('online', () => {
+    collaborationState.reconnectAttempts = 0;
     syncBadge('Red restablecida · reconectando…');
     initWebSocket();
 });
 
 window.addEventListener('offline', () => {
+    savePendingOffline();
     syncBadge(offlineSyncMessage());
 });
 

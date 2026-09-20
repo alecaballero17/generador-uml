@@ -425,6 +425,13 @@ class PhotoInterpreter:
                     raw_connections[key] = []
                 raw_connections[key].append((x1, y1, x2, y2))
 
+        crossings = self._detect_line_crossings(hough_lines, boxes)
+        if crossings:
+            for crossing in crossings:
+                self.review_notes.append(
+                    f"Posible cruce de líneas en ({crossing[0]},{crossing[1]}): revisa que las relaciones detectadas sean correctas."
+                )
+
         for (box_id_a, box_id_b), segments in raw_connections.items():
             # Tomar el segmento más largo como representativo
             best_seg = max(segments, key=lambda s: math.hypot(s[2]-s[0], s[3]-s[1]))
@@ -444,20 +451,33 @@ class PhotoInterpreter:
                 src_id, dst_id = box_id_b, box_id_a
 
             # Clasificar el tipo de relación por la forma de los endpoints en ambos extremos
-            rel_type_dst = self._classify_endpoint(binary, dst_pt, src_pt)
-            rel_type_src = self._classify_endpoint(binary, src_pt, dst_pt)
+            rel_type_dst, dst_marker = self._classify_endpoint_detailed(binary, dst_pt, src_pt)
+            rel_type_src, src_marker = self._classify_endpoint_detailed(binary, src_pt, dst_pt)
 
             if rel_type_dst in (RelationshipType.COMPOSITION, RelationshipType.AGGREGATION):
                 rel_type = rel_type_dst
             elif rel_type_src in (RelationshipType.COMPOSITION, RelationshipType.AGGREGATION):
                 rel_type = rel_type_src
             elif rel_type_dst == RelationshipType.GENERALIZATION:
-                rel_type = RelationshipType.GENERALIZATION
+                # Check if it's a hollow triangle (realization) by marker info
+                if dst_marker == 'hollow_triangle' and self._is_dashed_line(binary, src_pt, dst_pt):
+                    rel_type = RelationshipType.REALIZATION
+                    self.review_notes.append(
+                        f"Triángulo hueco con línea discontinua en ({dst_pt[0]},{dst_pt[1]}): interpretado como REALIZACIÓN (implementa interfaz)."
+                    )
+                else:
+                    rel_type = RelationshipType.GENERALIZATION
             elif rel_type_src == RelationshipType.GENERALIZATION:
                 # En herencia el triángulo apunta al padre: el padre debe ser el destino (target)
                 src_id, dst_id = dst_id, src_id
                 src_pt, dst_pt = dst_pt, src_pt
-                rel_type = RelationshipType.GENERALIZATION
+                if src_marker == 'hollow_triangle' and self._is_dashed_line(binary, dst_pt, src_pt):
+                    rel_type = RelationshipType.REALIZATION
+                    self.review_notes.append(
+                        f"Triángulo hueco con línea discontinua: interpretado como REALIZACIÓN (implementa interfaz)."
+                    )
+                else:
+                    rel_type = RelationshipType.GENERALIZATION
             else:
                 rel_type = RelationshipType.ASSOCIATION
 
@@ -473,11 +493,32 @@ class PhotoInterpreter:
                 rel_type=rel_type,
                 confidence=0.80 if rel_type != RelationshipType.ASSOCIATION else 0.75,
             )
-            if src_mult or dst_mult:
-                detected.raw_annotation = f"src={src_mult or '?'} dst={dst_mult or '?'}"
+
+            # Build detailed annotation with multiplicities
+            annotation_parts = []
+            if src_mult:
+                annotation_parts.append(f"src={src_mult}")
+            if dst_mult:
+                annotation_parts.append(f"dst={dst_mult}")
+            if annotation_parts:
+                detected.raw_annotation = ' '.join(annotation_parts)
+                # Find class names for the review note
+                src_name = next((b.parsed_class.name for b in boxes if b.id == src_id and b.parsed_class), src_id)
+                dst_name = next((b.parsed_class.name for b in boxes if b.id == dst_id and b.parsed_class), dst_id)
                 self.review_notes.append(
-                    f"Multiplicidad detectada: {src_mult or '?'}..{dst_mult or '?'} — confirmar manualmente."
+                    f"Multiplicidad detectada en {src_name}→{dst_name}: origen={src_mult or '?'}, destino={dst_mult or '?'} — confirmar manualmente."
                 )
+
+            # Check if this connection passes through a crossing zone
+            for cx, cy in crossings:
+                if self._segment_near_point(src_pt, dst_pt, (cx, cy), threshold=25):
+                    detected.confidence = max(0.50, detected.confidence - 0.20)
+                    src_name = next((b.parsed_class.name for b in boxes if b.id == src_id and b.parsed_class), src_id)
+                    dst_name = next((b.parsed_class.name for b in boxes if b.id == dst_id and b.parsed_class), dst_id)
+                    self.review_notes.append(
+                        f"La relación {src_name}↔{dst_name} pasa por una zona de cruce — verificar que no sea una relación diferente."
+                    )
+                    break
 
             lines.append(detected)
 
@@ -563,6 +604,125 @@ class PhotoInterpreter:
 
         return RelationshipType.ASSOCIATION
 
+    def _classify_endpoint_detailed(self, binary: np.ndarray, tip_pt: Tuple[int, int],
+                                    origin_pt: Tuple[int, int]) -> Tuple[RelationshipType, str]:
+        """Like _classify_endpoint but also returns the marker type string."""
+        h, w = binary.shape[:2]
+        tx, ty = tip_pt
+        roi_size = 40
+        rx1, ry1 = max(0, tx - roi_size), max(0, ty - roi_size)
+        rx2, ry2 = min(w, tx + roi_size), min(h, ty + roi_size)
+        if rx2 - rx1 < 10 or ry2 - ry1 < 10:
+            return RelationshipType.ASSOCIATION, 'none'
+        roi = binary[ry1:ry2, rx1:rx2]
+        contours, _ = cv2.findContours(roi, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area < 80:
+                continue
+            peri = cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, 0.06 * peri, True)
+            num_vertices = len(approx)
+            if num_vertices == 3 and area > 100:
+                # Check if filled or hollow
+                mask = np.zeros(roi.shape, dtype=np.uint8)
+                cv2.drawContours(mask, [cnt], -1, 255, -1)
+                fill_ratio = cv2.countNonZero(cv2.bitwise_and(roi, mask)) / max(area, 1)
+                marker = 'hollow_triangle' if fill_ratio < 0.55 else 'filled_triangle'
+                self.review_notes.append(
+                    f"Triángulo {'hueco' if marker == 'hollow_triangle' else 'relleno'} detectado en ({tx},{ty}): interpretado como HERENCIA."
+                )
+                return RelationshipType.GENERALIZATION, marker
+            if num_vertices == 4 and area > 80:
+                rect = cv2.minAreaRect(cnt)
+                box_w, box_h = rect[1]
+                if box_w > 0 and box_h > 0:
+                    aspect = min(box_w, box_h) / max(box_w, box_h)
+                    if aspect > 0.5:
+                        mask = np.zeros(roi.shape, dtype=np.uint8)
+                        cv2.drawContours(mask, [cnt], -1, 255, -1)
+                        fill_ratio = cv2.countNonZero(cv2.bitwise_and(roi, mask)) / max(area, 1)
+                        if fill_ratio > 0.6:
+                            self.review_notes.append(f"Rombo relleno en ({tx},{ty}): interpretado como COMPOSICIÓN.")
+                            return RelationshipType.COMPOSITION, 'filled_diamond'
+                        else:
+                            self.review_notes.append(f"Rombo hueco en ({tx},{ty}): interpretado como AGREGACIÓN.")
+                            return RelationshipType.AGGREGATION, 'hollow_diamond'
+        return RelationshipType.ASSOCIATION, 'none'
+
+    def _is_dashed_line(self, binary: np.ndarray, pt1: Tuple[int, int], pt2: Tuple[int, int]) -> bool:
+        """Checks if the line between two points appears dashed by sampling pixels along it."""
+        num_samples = 30
+        h, w = binary.shape[:2]
+        transitions = 0
+        prev_on = False
+        for i in range(num_samples):
+            t = i / max(num_samples - 1, 1)
+            x = int(pt1[0] + t * (pt2[0] - pt1[0]))
+            y = int(pt1[1] + t * (pt2[1] - pt1[1]))
+            if 0 <= x < w and 0 <= y < h:
+                on = binary[y, x] > 0
+                if i > 0 and on != prev_on:
+                    transitions += 1
+                prev_on = on
+        # A dashed line has many transitions (at least 4 on/off pairs)
+        return transitions >= 8
+
+    def _detect_line_crossings(self, hough_lines, boxes: List[DetectedBox]) -> List[Tuple[int, int]]:
+        """Detect points where detected line segments cross each other (outside boxes)."""
+        crossings = []
+        if hough_lines is None:
+            return crossings
+        segments = []
+        for line_seg in hough_lines:
+            coords = line_seg.flatten()
+            if len(coords) >= 4:
+                segments.append((int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3])))
+        for i in range(len(segments)):
+            for j in range(i + 1, len(segments)):
+                pt = self._segment_intersection(segments[i], segments[j])
+                if pt:
+                    # Skip intersections inside boxes
+                    inside = False
+                    for b in boxes:
+                        if b.x <= pt[0] <= b.x + b.w and b.y <= pt[1] <= b.y + b.h:
+                            inside = True
+                            break
+                    if not inside:
+                        crossings.append(pt)
+        return crossings
+
+    @staticmethod
+    def _segment_intersection(seg1, seg2) -> Optional[Tuple[int, int]]:
+        """Returns intersection point of two line segments, or None if they don't intersect."""
+        x1, y1, x2, y2 = seg1
+        x3, y3, x4, y4 = seg2
+        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        if abs(denom) < 1e-10:
+            return None
+        t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+        u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom
+        if 0.05 <= t <= 0.95 and 0.05 <= u <= 0.95:  # Exclude near-endpoint intersections
+            ix = int(x1 + t * (x2 - x1))
+            iy = int(y1 + t * (y2 - y1))
+            return (ix, iy)
+        return None
+
+    @staticmethod
+    def _segment_near_point(seg_start, seg_end, point, threshold=25) -> bool:
+        """Check if a point is within threshold distance of a line segment."""
+        x1, y1 = seg_start
+        x2, y2 = seg_end
+        px, py = point
+        dx, dy = x2 - x1, y2 - y1
+        length_sq = dx * dx + dy * dy
+        if length_sq == 0:
+            return math.hypot(px - x1, py - y1) <= threshold
+        t = max(0, min(1, ((px - x1) * dx + (py - y1) * dy) / length_sq))
+        proj_x = x1 + t * dx
+        proj_y = y1 + t * dy
+        return math.hypot(px - proj_x, py - proj_y) <= threshold
+
     def _detect_multiplicity_near(self, binary: np.ndarray, pt: Tuple[int, int]) -> Optional[str]:
         """Busca texto de multiplicidad (0..1, 1..*, etc.) cerca de un endpoint de línea."""
         if not PYTESSERACT_AVAILABLE:
@@ -570,7 +730,7 @@ class PhotoInterpreter:
 
         h, w = binary.shape[:2]
         px, py = pt
-        roi_margin = 35
+        roi_margin = 45  # Wider search area for better OCR
 
         rx1 = max(0, px - roi_margin)
         ry1 = max(0, py - roi_margin)
@@ -583,7 +743,9 @@ class PhotoInterpreter:
         roi = binary[ry1:ry2, rx1:rx2]
         try:
             inv = cv2.bitwise_not(roi)
-            text = pytesseract.image_to_string(inv, config="--psm 7 -c tessedit_char_whitelist=01234567890.*n").strip()
+            # Scale up for better OCR of small text
+            scaled = cv2.resize(inv, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+            text = pytesseract.image_to_string(scaled, config="--psm 7 -c tessedit_char_whitelist=01234567890.*n").strip()
             # Patterns de multiplicidad UML: 0..1, 1..*, *, 0..*, 1, n
             mult_pattern = re.match(r'^([0-9n*]+(?:\.\.[0-9n*]+)?)$', text)
             if mult_pattern:

@@ -5,33 +5,68 @@ Estimación orientativa sobre los requisitos expresados por el usuario, no porce
 | Bloque | Peso | Implementación estimada | Validación estimada |
 |---|---:|---:|---:|
 | Editor UML web y modelo | 20% | 90% | 85% |
-| Colaboración, invitaciones y recuperación | 15% | 85% | 65% |
+| Colaboración, invitaciones y recuperación | 15% | 90% | 70% |
 | APK e interacción móvil | 10% | 85% | 75% |
-| Voz y asistente contextual | 15% | 70% | 45% |
-| Foto a diagrama editable | 15% | 60% | 60% |
-| Operación offline y sincronización integral | 10% | 60% | 35% |
-| Generación backend y aplicación | 10% | 85% | 60% |
-| Intercambio StarUML y Enterprise Architect | 5% | 70% | 40% |
+| Voz y asistente contextual | 15% | 75% | 50% |
+| Foto a diagrama editable | 15% | 75% | 65% |
+| Operación offline y sincronización integral | 10% | 80% | 55% |
+| Generación backend y aplicación | 10% | 88% | 70% |
+| Intercambio StarUML y Enterprise Architect | 5% | 75% | 55% |
 
-Promedio ponderado aproximado: 78% de implementación y 63% de validación. Comunicar como rangos: 75–80% implementado y 60–65% comprobado. La validación no equivale a que el 63% de las pruebas pase: la batería actual pasa, pero su cobertura de requisitos es incompleta.
+Promedio ponderado aproximado: 84% de implementación y 67% de validación. Comunicar como rangos: 80–85% implementado y 65–70% comprobado. La validación no equivale a que el 67% de las pruebas pase: la batería actual pasa, pero su cobertura de requisitos es incompleta.
 
-## Evidencia nueva
+## Evidencia nueva (sesión 20 sep — tarde)
 
-- Compilación real de backend generado: `mvn test-compile` completado con `BUILD SUCCESS` (33 clases Java compiladas con `javac [release 17]` bajo JDK 23). Se garantizó compatibilidad JPA unificando `@Id` a tipo `Long` y evitando duplicación de IDs/versiones en subclases.
-- Generador móvil Flutter: corregida la generación de formularios en `flutter_generator.py` agregando declaración explícita de `TextEditingController` y liberación en `dispose()`.
-- Interoperabilidad: soporte ampliado en `XMIAdapter` para variantes de namespace de Sparx Enterprise Architect y resolución de tipos vía `xmi:idref`, verificado con prueba unitaria automatizada.
-- Revisión OCR web comprobada en navegador real: se cambió deposit() por deposit(amount: Double): Boolean antes de importar. El lienzo mostró el método con parámetro y retorno (la etiqueta visual se trunca por ancho).
-- Importación bloquea atributos duplicados y errores de interpretación, evitando omitirlos silenciosamente.
-- Casos reales previos: Android y web importaron siete clases, veinte atributos y diez métodos del ejemplo bancario.
-- Pruebas de colaboración con dos clientes y reconexión; todavía no equivalen al flujo completo con voz/foto offline en dos dispositivos.
+### Generación Spring Boot y DDL PostgreSQL robustos
+- **Métodos de operaciones UML en entidades (`_generate_operations`)**: genera los métodos con visibilidad, tipos de parámetros, tipos de retorno, excepciones de no implementación y `@Override` automático cuando la clase realiza interfaces UML.
+- **Script DDL PostgreSQL (`schema.sql`)**: ordenación topológica de tablas (las clases padre se crean antes que las hijas para evitar errores de FK inexistente).
+- **Herencia `InheritanceType.JOINED` en base de datos**: las subclases generan clave primaria `id BIGINT PRIMARY KEY REFERENCES {parent}(id) ON DELETE CASCADE`, sin duplicar columnas ya presentes en la clase padre.
+- **Columna `@Version` en DDL**: incluye `version BIGINT DEFAULT 0` en tablas raíz para control de concurrencia optimista JPA.
+- **Tablas intermedias ManyToMany (`*` a `*`)**: generación automática de tablas de unión con claves foráneas compuestas e índices optimizados (`idx_{tabla}_{col}`).
+- **Índices de clave foránea completos**: para todas las relaciones (composición, agregación, asociación 1:1, 1:N y N:M).
+- Nuevos tests añadidos en `test_full_generation.py` (17 tests completos).
+
+### Interoperabilidad StarUML y Enterprise Architect (XMI / MDJ)
+- Verificación y round-trip de diagramas reales de arquitectura de software (`diagrama_generador_uml_software.mdj` y `diagrama_generador_uml_software.xmi`) sumados a los de veterinaria.
+- `test_interop_samples.py` ampliado con validación completa y re-exportación (4 tests).
+
+### Cola de sincronización offline con retry
+- Nuevo sistema `pendingOffline` en `collaboration.js`: los cambios hechos sin conexión se acumulan y persisten en `localStorage` junto con el borrador colaborativo.
+- Al reconectar, `flushOfflineQueue()` envía automáticamente los cambios pendientes fusionándolos con la versión remota mediante three-way merge.
+- `broadcastChange()` ahora salva a `pendingOffline` cuando el WebSocket no está abierto o cuando `send()` falla.
+- `ws.onclose` mueve `inflight` a `pendingOffline` para no perder el cambio que estaba en vuelo.
+- Reconexión con backoff exponencial (3 s → máx 30 s) y reset al volver online.
+- Indicador de estado diferenciado: "Sin conexión · cambios pendientes" vs "Sin conexión · guardado local".
+- Test suite: `test_offline_queue.cjs` (8 tests) + `test_offline_broadcast.cjs`.
+
+### Detección semántica de relaciones en fotos
+- **Clasificación detallada de endpoints** (`_classify_endpoint_detailed`): distingue triángulo hueco (posible realización) de triángulo relleno (herencia), y rombo hueco (agregación) de rombo relleno (composición).
+- **Detección de líneas discontinuas** (`_is_dashed_line`): si un triángulo hueco se combina con una línea discontinua, se interpreta como REALIZACIÓN en lugar de herencia.
+- **Detección de cruces** (`_detect_line_crossings`): identifica puntos de intersección de segmentos fuera de las cajas y reduce la confianza de las relaciones afectadas, generando notas de revisión.
+- **Multiplicidades mejoradas**: ROI expandida a 45 px con escalado 2× para mejor OCR; nombres de clase incluidos en las notas de revisión.
+- Test suite: `test_photo_crossings.py` (6 tests).
+
+### Mejora de revisión UI de relaciones desde fotos
+- `renderPhotoConnections` rediseñado: cada marcador muestra botones separados para herencia y realización.
+- Rombos huecos ofrecen botón directo de agregación.
+- Cruces y ramificaciones se muestran en sección destacada con estilo de alerta (amarillo).
+- Multiplicidades detectadas se muestran junto al nombre de la relación propuesta.
+
+### Asistente de voz: soporte de relaciones ampliado
+- El asistente ahora soporta `realization` y `dependency` como tipos de relación válidos, tanto en el prompt de Gemini como en la validación del frontend.
+
+## Batería de pruebas actual
+- 79 tests Python (pytest) — todos pasan
+- 13 suites Node.js (.cjs) — todas pasan
+- Total: 92 tests/suites automatizados
 
 ## Criterios aún necesarios para cerrar
 
-1. Fotos: resolver o revisar explícitamente todas las relaciones, con dirección, tipo, multiplicidades y cruces; corpus variado de pizarras, no solo el ejemplo digital.
-2. Voz: medir errores con frases y hablantes reales y probar captura/transcripción/interpretación sin red en Android.
-3. Offline: edición, cierre, reapertura y sincronización con conflictos sin pérdidas entre web y Android.
-4. Generación: compilar y ejecutar varias aplicaciones representativas con relaciones, herencia y validaciones.
-5. Interoperabilidad: abrir y reexportar archivos dentro de StarUML y Enterprise Architect; comprobar fidelidad.
-6. Documentación final: evidencias y límites consistentes con el comportamiento real.
+1. Fotos: corpus variado de fotos reales (pizarras, papel); las pruebas actuales usan imágenes sintéticas.
+2. Voz: medición de errores con hablantes reales y prueba de captura/transcripción/interpretación sin red en Android.
+3. Offline: verificar flujo completo cierre → reapertura → reconexión → merge entre web y Android con datos reales.
+4. Generación: compilar y ejecutar varias aplicaciones con herencia, validaciones y relaciones complejas.
+5. Interoperabilidad: abrir y reexportar archivos dentro de StarUML y Enterprise Architect reales.
+6. Documentación final: evidencias por requisito coherentes con el comportamiento real.
 
 Estado: incompleto. No declarar entrega final ni convertir estos rangos en una promesa de tiempo.

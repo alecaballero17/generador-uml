@@ -296,7 +296,7 @@ const ConversationalAssistant = (function() {
         for(const attr of act.attributes||[]){identifier(attr.name);if(!types.includes(attr.type))throw new Error('Tipo de atributo no admitido.');}
         if(act.newAttributeName)identifier(act.newAttributeName);
         if(act.type && act.action==='updateAttribute'&&!types.includes(act.type))throw new Error('Tipo de atributo no admitido.');
-        if(act.action==='addRelationship'&&!['association','aggregation','composition','generalization'].includes(act.type))throw new Error('Tipo de relación no admitido.');
+        if(act.action==='addRelationship'&&!['association','aggregation','composition','generalization','realization','dependency'].includes(act.type))throw new Error('Tipo de relación no admitido.');
         const before=JSON.stringify(state.model.toJSON());
         const result=executeActionUnchecked(act);
         if(before===JSON.stringify(state.model.toJSON()))throw new Error('No hubo cambios: el elemento no existe o ya tiene esos datos.');

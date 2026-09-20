@@ -214,6 +214,80 @@ class TestSpringBootFullGeneration:
         assert "CascadeType" in cliente_file or "cascade" in cliente_file.lower(), \
             "Composición debe generar cascade en Cliente"
 
+    def test_entity_operations_generated(self):
+        """Verifica que las operaciones UML se generen como métodos en la entidad."""
+        diagram = _build_veterinaria_diagram()
+        gen = SpringBootGenerator(diagram)
+        files = gen.generate()
+
+        persona_file = next((c for f, c in files.items() if "Persona.java" in f), "")
+        assert "public String getNombreCompleto()" in persona_file, \
+            "Persona.java debe contener el método getNombreCompleto()"
+
+    def test_schema_sql_inheritance_and_order(self):
+        """Verifica orden topológico (padre antes que hijo) y PK con REFERENCES en JOINED inheritance."""
+        diagram = _build_veterinaria_diagram()
+        gen = SpringBootGenerator(diagram)
+        files = gen.generate()
+
+        assert "schema.sql" in files
+        sql = files["schema.sql"]
+
+        pos_persona = sql.find("CREATE TABLE IF NOT EXISTS persona")
+        pos_vet = sql.find("CREATE TABLE IF NOT EXISTS veterinario")
+        pos_cli = sql.find("CREATE TABLE IF NOT EXISTS cliente")
+
+        assert pos_persona != -1 and pos_vet != -1 and pos_cli != -1
+        assert pos_persona < pos_vet, "Tabla persona debe crearse antes que veterinario"
+        assert pos_persona < pos_cli, "Tabla persona debe crearse antes que cliente"
+
+        assert "REFERENCES persona(id) ON DELETE CASCADE" in sql, \
+            "Subclases en JOINED inheritance deben referenciar la tabla padre"
+
+    def test_many_to_many_schema_sql(self):
+        """Verifica generación de tabla intermedia ManyToMany con índices en schema.sql."""
+        d = UMLDiagram(name="ManyToManyTest")
+        est = UMLClass(id="est", name="Estudiante", attributes=[UMLAttribute(name="id", type="Long")])
+        cur = UMLClass(id="cur", name="Curso", attributes=[UMLAttribute(name="id", type="Long")])
+        d.classes = [est, cur]
+        d.relationships.append(UMLRelationship(
+            type=RelationshipType.ASSOCIATION,
+            source=RelationshipEnd(class_id="est", multiplicity="*"),
+            target=RelationshipEnd(class_id="cur", multiplicity="*"),
+        ))
+        gen = SpringBootGenerator(d)
+        files = gen.generate()
+        sql = files["schema.sql"]
+        assert "CREATE TABLE IF NOT EXISTS estudiante_curso" in sql
+        assert "REFERENCES estudiante(id) ON DELETE CASCADE" in sql
+        assert "REFERENCES curso(id) ON DELETE CASCADE" in sql
+
+    def test_interface_realization_with_override(self):
+        """Verifica que clase que realiza interfaz incluya implements y @Override en métodos coincidentes."""
+        d = UMLDiagram(name="RealizationTest")
+        iface = UMLClass(
+            id="iface", name="Exportable", is_interface=True,
+            operations=[UMLOperation(name="exportarXml", return_type="String", parameters=[])]
+        )
+        cls = UMLClass(
+            id="doc", name="Documento",
+            attributes=[UMLAttribute(name="titulo", type="String")],
+            operations=[UMLOperation(name="exportarXml", return_type="String", parameters=[])]
+        )
+        d.classes = [iface, cls]
+        d.relationships.append(UMLRelationship(
+            type=RelationshipType.REALIZATION,
+            source=RelationshipEnd(class_id="doc"),
+            target=RelationshipEnd(class_id="iface"),
+        ))
+        gen = SpringBootGenerator(d)
+        files = gen.generate()
+
+        doc_file = next((c for f, c in files.items() if "Documento.java" in f), "")
+        assert "implements Exportable" in doc_file
+        assert "@Override" in doc_file
+        assert "public String exportarXml()" in doc_file
+
 
 class TestFlutterFullGeneration:
     """Tests de generación completa de proyecto Flutter."""
