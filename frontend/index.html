@@ -707,6 +707,13 @@
                     </div>
                     <div id="photoReviewStats" class="photo-review-stats"></div>
                     <div id="photoReviewNotes" class="photo-review-notes"></div>
+                    <label>Importar fotografía
+                        <select id="photoImportMode">
+                            <option value="append">Agregar al diagrama actual</option>
+                            <option value="replace">Reemplazar todas las clases y relaciones actuales</option>
+                        </select>
+                    </label>
+                    <p>Reemplazar quita el contenido actual. Puedes recuperarlo con Deshacer.</p>
                     <div class="photo-review-actions">
                         <button class="btn-primary" id="btnAcceptPhotoDiagram">✓ Aceptar e Importar al Lienzo</button>
                         <button class="btn-secondary" id="btnDiscardPhotoDiagram">Descartar</button>

@@ -14,9 +14,16 @@ const collaborationStorageKey = () => `collaboration_${(typeof state !== 'undefi
 function savedCollaboration() {
     if (typeof state === 'undefined' || !state.projectId) return null;
     const latest=localStorage.getItem(`collaboration_latest_${state.projectId}`);
-    return JSON.parse(localStorage.getItem(collaborationStorageKey()) || (latest && localStorage.getItem(latest)) || localStorage.getItem(`collaboration_${state.projectId}`) || 'null');
+    for (const key of new Set([collaborationStorageKey(), latest, `collaboration_${state.projectId}`])) {
+        if (!key) continue;
+        try {
+            const saved=JSON.parse(localStorage.getItem(key) || 'null');
+            if (saved && saved.diagram && Array.isArray(saved.diagram.classes)) return saved;
+        } catch (_) { /* Keep the damaged copy; try the next recoverable draft. */ }
+    }
+    return null;
 }
-const collaborationState = { base: null, revision: 0, token: null, role: 'admin', inflight: null, conflict: null, ready: false, reconnect: null };
+const collaborationState = { base: null, revision: 0, token: null, role: 'admin', inflight: null, conflict: null, ready: false, reconnect: null, localSaveFailed: false };
 const copyDiagram = value => JSON.parse(JSON.stringify(value));
 const stableDiagram = x => Array.isArray(x) ? x.map(stableDiagram) : x && typeof x === 'object' ? Object.fromEntries(Object.keys(x).sort().map(k=>[k,stableDiagram(x[k])])) : x;
 const sameDiagram = (a,b) => JSON.stringify(stableDiagram(a)) === JSON.stringify(stableDiagram(b));
@@ -41,13 +48,25 @@ function mergeDiagrams(base, local, remote, preferLocal = false, path = 'diagram
     throw new Error(path);
 }
 function syncBadge(text) { $('#collabStatus').textContent = text; }
+function offlineSyncMessage() {
+    return collaborationState.localSaveFailed ? 'Sin conexión · no se pudo guardar; no cierres la app' : 'Sin conexión · guardado local';
+}
+function refreshSyncBadge(participants) {
+    if (collaborationState.localSaveFailed) return syncBadge('No se pudo guardar localmente; no cierres la app');
+    if (collaborationState.conflict) return syncBadge('Conflicto: revisa tus cambios');
+    if (collaborationState.inflight) return syncBadge('Guardando cambios…');
+    if (collaborationState.role==='viewer') return syncBadge('Solo lectura');
+    if (!sameDiagram(state.model.toJSON(),collaborationState.base)) return syncBadge('Cambios pendientes de sincronizar');
+    syncBadge(participants === undefined ? 'Sincronizado' : `${participants} participantes · edición`);
+}
 function persistCollaboration() {
     try {
         localStorage.setItem(collaborationStorageKey(), JSON.stringify({base: collaborationState.base, revision: collaborationState.revision, token: collaborationState.token, diagram: state.model.toJSON()}));
         if (!sameDiagram(state.model.toJSON(),collaborationState.base) || !localStorage.getItem(`collaboration_latest_${state.projectId}`)) localStorage.setItem(`collaboration_latest_${state.projectId}`,collaborationStorageKey());
         localStorage.setItem('last_collaboration_project',state.projectId);
         saveCurrentProjectToStorage();
-    } catch (_) { syncBadge('No se pudo guardar localmente'); }
+        collaborationState.localSaveFailed=false;
+    } catch (_) { collaborationState.localSaveFailed=true; syncBadge('No se pudo guardar localmente; no cierres la app'); }
 }
 function applySharedDiagram(diagram) {
     state.isRemoteUpdate = true;
@@ -57,11 +76,11 @@ function applySharedDiagram(diagram) {
     state.isRemoteUpdate = false;
 }
 function handleSharedSnapshot(msg, acknowledged = false) {
+    if (msg.revision < collaborationState.revision) return;
     const current = state.model.toJSON();
     const base = acknowledged ? collaborationState.inflight : collaborationState.base;
     if (acknowledged) collaborationState.inflight = null;
     else if (collaborationState.inflight) return;
-    if (msg.revision < collaborationState.revision) return;
     try {
         const joined = base ? mergeDiagrams(base,current,msg.diagram) : msg.diagram;
         collaborationState.base = copyDiagram(msg.diagram);
@@ -99,14 +118,21 @@ function showCollaborationConflict(msg,base,local,path) {
     document.body.append(dialog); dialog.showModal();
 }
 function broadcastChange() {
-    if (state.isRemoteUpdate || !collaborationState.ready || collaborationState.conflict) return;
+    if (state.isRemoteUpdate) return;
     persistCollaboration();
+    if (!collaborationState.ready || collaborationState.conflict) return;
     if (collaborationState.role==='viewer' || collaborationState.inflight || !collaborationState.base || state.ws?.readyState!==WebSocket.OPEN) return;
     const diagram=copyDiagram(state.model.toJSON());
     if (sameDiagram(diagram,collaborationState.base)) return;
     collaborationState.inflight=diagram;
-    state.ws.send(JSON.stringify({type:'update',revision:collaborationState.revision,diagram}));
-    syncBadge('Guardando cambios…');
+    try {
+        state.ws.send(JSON.stringify({type:'update',revision:collaborationState.revision,diagram}));
+        syncBadge('Guardando cambios…');
+    } catch(error) {
+        collaborationState.inflight=null;
+        syncBadge(offlineSyncMessage());
+        state.ws.close();
+    }
 }
 async function initWebSocket() {
     clearTimeout(collaborationState.reconnect);
@@ -143,8 +169,8 @@ async function initWebSocket() {
             collaborationState.ready=true;
             if (msg.type==='snapshot' || msg.type==='ack') {
                 handleSharedSnapshot(msg,msg.type==='ack');
-                if(!collaborationState.conflict)syncBadge(collaborationState.role==='viewer'?'Solo lectura':'Sincronizado');
-            } else if (msg.type==='presence') syncBadge(`${msg.count} participantes · ${collaborationState.role==='viewer'?'lectura':'edición'}`);
+                refreshSyncBadge();
+            } else if (msg.type==='presence') refreshSyncBadge(msg.count);
             else if (msg.type==='conflict') showCollaborationConflict(msg,collaborationState.base,state.model.toJSON(),msg.message);
             else if (msg.type==='error') { collaborationState.inflight=null; showToast(msg.message,'error'); }
             if (collaborationState.role==='viewer') {
@@ -155,13 +181,13 @@ async function initWebSocket() {
         };
         state.ws.onclose=event=>{
             collaborationState.inflight=null;
-            syncBadge(event.code===4403?'Enlace sin permiso':'Sin conexión · guardado local');
+            syncBadge(event.code===4403?'Enlace sin permiso':offlineSyncMessage());
             if (event.code!==4403) collaborationState.reconnect=setTimeout(initWebSocket,3000);
         };
-        state.ws.onerror=()=>syncBadge('Sin conexión · guardado local');
+        state.ws.onerror=()=>syncBadge(offlineSyncMessage());
     } catch(error) {
         collaborationState.ready=true;
-        syncBadge(error.message==='Falta el enlace de acceso'?error.message:'Sin conexión · guardado local');
+        syncBadge(error.message==='Falta el enlace de acceso'?error.message:offlineSyncMessage());
         collaborationState.reconnect=setTimeout(initWebSocket,3000);
     }
 }
@@ -238,3 +264,13 @@ document.addEventListener('DOMContentLoaded', () => {
         statusBadge.addEventListener('click', showServerConnectionDialog);
     }
 });
+
+window.addEventListener('online', () => {
+    syncBadge('Red restablecida · reconectando…');
+    initWebSocket();
+});
+
+window.addEventListener('offline', () => {
+    syncBadge(offlineSyncMessage());
+});
+

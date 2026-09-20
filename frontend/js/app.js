@@ -1741,6 +1741,7 @@ $('#photoInput').addEventListener('change', (e) => {
 
 function handlePhotoFile(file) {
     state.pendingPhotoFile = file;
+    document.getElementById('photoImportMode').value='append';
     const reader = new FileReader();
     reader.onload = (e) => {
         $('#photoImage').src = e.target.result;
@@ -1822,7 +1823,7 @@ $('#btnAcceptPhotoDiagram').addEventListener('click', () => {
     if (!state.detectedDiagram) return;
     if(collaborationState.role==='viewer'){showToast('Este enlace es de solo lectura','warning');return;}
     let reviewed;
-    try { reviewed=buildPhotoDiagram(document.getElementById('webPhotoText').value); } catch(error){showToast(error.message,'error');return;}
+    try { reviewed=preparePhotoImport(document.getElementById('webPhotoText').value,document.getElementById('photoImportMode').value); } catch(error){showToast(error.message,'error');return;}
     saveUndo();
     state.model = reviewed;
     state.classCounter = state.model.classes.length + 1;

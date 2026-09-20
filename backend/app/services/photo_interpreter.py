@@ -443,8 +443,23 @@ class PhotoInterpreter:
                 src_pt, dst_pt = (x2, y2), (x1, y1)
                 src_id, dst_id = box_id_b, box_id_a
 
-            # Clasificar el tipo de relación por la forma del endpoint
-            rel_type = self._classify_endpoint(binary, dst_pt, src_pt)
+            # Clasificar el tipo de relación por la forma de los endpoints en ambos extremos
+            rel_type_dst = self._classify_endpoint(binary, dst_pt, src_pt)
+            rel_type_src = self._classify_endpoint(binary, src_pt, dst_pt)
+
+            if rel_type_dst in (RelationshipType.COMPOSITION, RelationshipType.AGGREGATION):
+                rel_type = rel_type_dst
+            elif rel_type_src in (RelationshipType.COMPOSITION, RelationshipType.AGGREGATION):
+                rel_type = rel_type_src
+            elif rel_type_dst == RelationshipType.GENERALIZATION:
+                rel_type = RelationshipType.GENERALIZATION
+            elif rel_type_src == RelationshipType.GENERALIZATION:
+                # En herencia el triángulo apunta al padre: el padre debe ser el destino (target)
+                src_id, dst_id = dst_id, src_id
+                src_pt, dst_pt = dst_pt, src_pt
+                rel_type = RelationshipType.GENERALIZATION
+            else:
+                rel_type = RelationshipType.ASSOCIATION
 
             # Detectar multiplicidades cerca de los endpoints
             src_mult = self._detect_multiplicity_near(binary, src_pt)

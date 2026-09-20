@@ -188,6 +188,27 @@ function refreshMobileCards() {
     }
 }
 
+function preparePhotoImport(text, mode = 'append') {
+    if(!['append','replace'].includes(mode))throw new Error('Modo de importación inválido');
+    const imported=buildPhotoDiagram(text);
+    const next=UMLModel.fromJSON(state.model.toJSON());
+    if(mode==='replace'){next.classes=[];next.relationships=[];}
+    const names=new Set(next.classes.map(cls=>cls.name.toLowerCase()));
+    if(imported.classes.some(cls=>names.has(cls.name.toLowerCase())))throw new Error('Hay nombres de clases repetidos; corrige el texto antes de importar');
+    const hasExisting=next.classes.length>0;
+    const offset=next.classes.reduce((max,cls)=>Math.max(max,cls.position.y+(cls.size?.height||120)),0);
+    for(const cls of imported.classes){cls.position.y+=hasExisting?offset+60:0;next.addClass(cls);}
+    return next;
+}
+function applyPhotoImport(text) {
+    if(collaborationState.role==='viewer')throw new Error('Este enlace es de solo lectura');
+    const next=preparePhotoImport(text);
+    const count=next.classes.length-state.model.classes.length;
+    saveUndo();state.model=next;
+    renderAll();persistCollaboration();broadcastChange();refreshMobileCards();
+    return count;
+}
+
 function buildPhotoDiagram(text) {
     const plans=reviewPhotoText(text);
     if(!plans.length)throw new Error('No se reconocieron clases válidas. Revisa el texto.');
@@ -456,16 +477,10 @@ function initMobileEditor() {
 
     $('#applyPhotoText').onclick = () => {
         try {
-            const plans = reviewPhotoText($('#mobilePhotoText').value);
-            if (!plans.length) throw new Error('No se detectaron clases válidas. Revisa el texto arriba.');
-            const names = plans.map(p => p.name.toLowerCase());
-            if (new Set(names).size !== names.length || state.model.classes.some(c => names.includes(c.name.toLowerCase()))) {
-                throw new Error('Hay nombres de clases repetidos; corrige el texto antes de importar');
-            }
-            for (const plan of plans) applyUMLPlan(plan);
+            const count=applyPhotoImport($('#mobilePhotoText').value);
             const status = document.getElementById('mobilePhotoStatus');
-            if (status) status.textContent = `✓ Importadas ${plans.length} clases al diagrama.`;
-            aiStatus(`Importadas ${plans.length} clases revisadas. Revisa atributos y añade las relaciones.`);
+            if (status) status.textContent = `✓ Importadas ${count} clases al diagrama.`;
+            aiStatus(`Importadas ${count} clases revisadas. Revisa atributos y añade las relaciones.`);
         } catch (e) {
             const status = document.getElementById('mobilePhotoStatus');
             if (status) status.textContent = 'Error: ' + e.message;
@@ -513,21 +528,36 @@ function openMobileRelationship(candidate = null) {
     if(!state.model.classes.length){showToast('Crea primero una clase','info');return;}
     const dialog=document.createElement('dialog');
     dialog.innerHTML=`<form><h2>Conectar clases</h2><p>En herencia, el origen es la clase hija y el destino es la clase padre.</p>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:6px;"><button type="button" id="btnSwapDirection" class="btn" style="font-size:12px;padding:4px 10px;cursor:pointer;">⇄ Invertir origen y destino</button></div>
     <label>Clase de origen<select name="source"></select></label>
     <label>Clase de destino<select name="target"></select></label>
     <label>Relación<select name="type"><option value="association">Asociación</option><option value="generalization">Herencia</option><option value="aggregation">Agregación</option><option value="composition">Composición</option><option value="dependency">Dependencia</option><option value="realization">Implementa interfaz</option></select></label>
     <label>Multiplicidad de origen<select name="sourceMult"><option value="">Sin especificar</option><option>1</option><option>0..1</option><option>0..*</option><option>1..*</option></select></label>
     <label>Multiplicidad de destino<select name="targetMult"><option value="">Sin especificar</option><option>0..*</option><option>1</option><option>0..1</option><option>1..*</option></select></label>
-    <p role="alert"></p><button type="button">Cancelar</button><button type="submit" class="btn-primary">Guardar relación</button></form>`;
+    <p role="alert"></p><button type="button" id="btnCancelRel">Cancelar</button><button type="submit" class="btn-primary">Guardar relación</button></form>`;
     const form=dialog.querySelector('form');
     for(const cls of state.model.classes)for(const name of ['source','target']){
         const option=document.createElement('option');option.value=cls.id;option.textContent=cls.name;form.elements[name].append(option);
     }
     if(state.model.classes.length>1)form.elements.target.selectedIndex=1;
-    if(candidate?.source && candidate?.target){form.elements.source.value=candidate.source;form.elements.target.value=candidate.target;if(candidate.type)form.elements.type.value=candidate.type;}
+    if(candidate?.source && candidate?.target){
+        form.elements.source.value=candidate.source;
+        form.elements.target.value=candidate.target;
+        if(candidate.type)form.elements.type.value=candidate.type;
+        if(candidate.sourceMult)form.elements.sourceMult.value=candidate.sourceMult;
+        if(candidate.targetMult)form.elements.targetMult.value=candidate.targetMult;
+    } else if(candidate?.target && !candidate?.source) {
+        form.elements.target.value=candidate.target;
+        if(candidate.type)form.elements.type.value=candidate.type;
+    }
     const updateMultiplicity=()=>{const enabled=['association','aggregation','composition'].includes(form.elements.type.value);form.elements.sourceMult.disabled=!enabled;form.elements.targetMult.disabled=!enabled;};
     form.elements.type.onchange=updateMultiplicity;updateMultiplicity();
-    dialog.querySelector('button[type=button]').onclick=()=>{dialog.close();dialog.remove();};
+    dialog.querySelector('#btnSwapDirection').onclick=()=>{
+        const prevSource = form.elements.source.value;
+        form.elements.source.value = form.elements.target.value;
+        form.elements.target.value = prevSource;
+    };
+    dialog.querySelector('#btnCancelRel').onclick=()=>{dialog.close();dialog.remove();};
     form.onsubmit=event=>{
         event.preventDefault();
         try {
@@ -558,17 +588,26 @@ function renderPhotoConnections(result, container = null) {
     const section=document.createElement('section');section.id='photoConnectionsReview';
     const title=document.createElement('h3');title.textContent='Conexiones de la foto: revisar';section.append(title);
     const note=document.createElement('p');note.textContent='Son propuestas. Confirma el tipo, la dirección y las multiplicidades mirando la foto. No se agregan automáticamente.';section.append(note);
+    const find=index=>{const name=UMLCommands.identifier(result.names[index],true);return state.model.classes.find(c=>c.name.toLowerCase()===name.toLowerCase());};
     for(const marker of result.markers||[]){
         const hint=document.createElement('p');
-        hint.textContent=marker.kind==='hollowDiamond' ? `Rombo vacío junto a ${result.names[marker.box]}: posible agregación; revisa a qué clase llega la línea.` : `Triángulo vacío junto a ${result.names[marker.box]}: posible herencia o realización; revisa las clases de origen y si la línea es continua.`;
+        const targetCls = find(marker.box);
+        if(marker.kind==='hollowTriangle' && targetCls){
+            hint.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px;';
+            hint.innerHTML=`<span>Triángulo junto a <strong>${targetCls.name}</strong> (posible herencia hacia ${targetCls.name})</span>`;
+            const btn=document.createElement('button');btn.type='button';btn.className='btn btn-sm';btn.textContent=`Conectar hijo → ${targetCls.name}`;
+            btn.onclick=()=>openMobileRelationship({target:targetCls.id,type:'generalization'});
+            hint.append(btn);
+        } else {
+            hint.textContent=marker.kind==='hollowDiamond' ? `Rombo vacío junto a ${result.names[marker.box]}: posible agregación; revisa a qué clase llega la línea.` : `Triángulo vacío junto a ${result.names[marker.box]}: posible herencia o realización; revisa las clases de origen y si la línea es continua.`;
+        }
         section.append(hint);
     }
-    const find=index=>{const name=UMLCommands.identifier(result.names[index],true);return state.model.classes.find(c=>c.name.toLowerCase()===name.toLowerCase());};
     for(const pair of result.connections||[]){
         const button=document.createElement('button');button.type='button';button.textContent=pair.map(i=>result.names[i]).join(' ↔ ');button.className='btn';
         const suggestion=(result.suggestions||[]).find(s=>pair.includes(s.source)&&pair.includes(s.target));
-        if(suggestion)button.textContent+=' — posible agregación';
-        button.onclick=()=>{try{const source=find(suggestion?suggestion.source:pair[0]),target=find(suggestion?suggestion.target:pair[1]);if(!source||!target)throw new Error('Importa primero las clases o comprueba sus nombres.');openMobileRelationship({source:source.id,target:target.id,type:suggestion?.type});}catch(error){note.textContent=error.message;}};
+        if(suggestion)button.textContent+=` — posible ${suggestion.type==='aggregation'?'agregación':suggestion.type}`;
+        button.onclick=()=>{try{const source=find(suggestion?suggestion.source:pair[0]),target=find(suggestion?suggestion.target:pair[1]);if(!source||!target)throw new Error('Importa primero las clases o comprueba sus nombres.');openMobileRelationship({source:source.id,target:target.id,type:suggestion?.type,sourceMult:suggestion?.sourceMult,targetMult:suggestion?.targetMult});}catch(error){note.textContent=error.message;}};
         section.append(button);
     }
     const manual=document.createElement('button');manual.type='button';manual.className='btn';manual.textContent='Conectar clases manualmente';manual.onclick=()=>openMobileRelationship();section.append(manual);

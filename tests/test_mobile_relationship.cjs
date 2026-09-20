@@ -13,3 +13,19 @@ assert.equal(vm.runInContext('state.model.relationships[0].target.multiplicity',
 elements.type.value='association';elements.sourceMult.value='';elements.targetMult.value='';form.onsubmit({preventDefault(){}});
 assert.equal(vm.runInContext('state.model.relationships[1].source.multiplicity',ctx),null);
 assert.equal(vm.runInContext('state.model.relationships[1].target.multiplicity',ctx),null);
+
+// Test candidate pre-population and direction swap button
+const swapBtn = {};
+dialog.querySelector = s => s === 'form' ? form : s === '[role=alert]' ? alert : s === '#btnSwapDirection' ? swapBtn : {};
+vm.runInContext("openMobileRelationship({source:'a',target:'b',type:'composition',sourceMult:'1',targetMult:'1..*'})", ctx);
+assert.equal(elements.source.value, 'a');
+assert.equal(elements.target.value, 'b');
+assert.equal(elements.type.value, 'composition');
+assert.equal(elements.sourceMult.value, '1');
+assert.equal(elements.targetMult.value, '1..*');
+assert.equal(typeof swapBtn.onclick, 'function');
+swapBtn.onclick();
+assert.equal(elements.source.value, 'b');
+assert.equal(elements.target.value, 'a');
+console.log('Inversión de dirección y precarga de candidatos verificadas.');
+

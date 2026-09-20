@@ -66,55 +66,20 @@ const ConversationalAssistant = (function() {
     let audioAnalyser = null;
     let animFrameId = null;
 
-    let activeBackendHost = null;
-
-    // ─── Detección Rápida del Host Activo (USB / Wi-Fi) ─────────────────────
-    async function getBackendHost() {
-        if (activeBackendHost) return activeBackendHost;
-        const candidates = [
-            typeof umlBackendOrigin==='function'?umlBackendOrigin():localStorage.getItem('uml_backend_url'),
-            'http://127.0.0.1:8000',
-            'http://127.0.0.1:8765',
-            'http://192.168.1.50:8000',
-            'http://10.0.2.2:8000'
-        ];
-        for (const base of candidates.filter(Boolean)) {
-            try {
-                const ctrl = new AbortController();
-                const to = setTimeout(() => ctrl.abort(), 1200);
-                const res = await fetch(`${base}/api/health`, { signal: ctrl.signal });
-                clearTimeout(to);
-                if (res.ok) {
-                    activeBackendHost = base;
-                    return base;
-                }
-            } catch (_) {}
-        }
-        throw new Error('Servidor no disponible. Usando interpretación local.');
-    }
-
-    // ─── Fetch hacia el Backend con Timeout Generoso para Gemini (30s) ───────
+    // Use the configured server only; never probe unrelated LAN addresses.
     async function backendFetch(path, options = {}) {
         if(typeof navigator!=='undefined' && navigator.onLine===false)throw new Error('Sin conexión.');
-        const isMobileHost = (
-            window.location.host === 'appassets.androidplatform.net' ||
-            window.location.protocol === 'file:' ||
-            !window.location.origin.startsWith('http')
-        );
-
-        if (!isMobileHost) {
-            return fetch(path, options);
-        }
-
-        const base = await getBackendHost();
+        const isMobileHost = window.location.host === 'appassets.androidplatform.net' ||
+            window.location.protocol === 'file:' || !window.location.origin.startsWith('http');
+        const base = typeof umlBackendOrigin === 'function' ? umlBackendOrigin() :
+            (isMobileHost ? localStorage.getItem('uml_backend_url') : window.location.origin);
+        if (!base) throw new Error('Configura el servidor para usar el asistente en línea.');
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
         try {
-            return await fetch(`${base}${path}`, {...options,signal:controller.signal});
-        } catch(error) {activeBackendHost=null;throw error;}
-        finally {clearTimeout(timeoutId);}
+            return await fetch(`${base}${path}`, {...options, signal:controller.signal});
+        } finally { clearTimeout(timeoutId); }
     }
-
     // ─── Visualizador de Ondas en Tiempo Real (Responde a la voz) ────────────
     function startAudioVisualizer(stream) {
         stopAudioVisualizer();
