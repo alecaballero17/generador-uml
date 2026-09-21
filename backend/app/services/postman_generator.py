@@ -19,28 +19,38 @@ def _generate_sample_value(attr_type: str, attr_name: str) -> object:
 
     if "id" == name_lower:
         return 1
-    if type_lower in ("string",):
+    if type_lower in ("string", "text", "varchar"):
         if "nombre" in name_lower or "name" in name_lower:
             return "Ejemplo"
         if "email" in name_lower or "correo" in name_lower:
             return "ejemplo@mail.com"
-        if "telefono" in name_lower or "phone" in name_lower:
+        if "telefono" in name_lower or "phone" in name_lower or "celular" in name_lower:
             return "+591 12345678"
         if "direccion" in name_lower or "address" in name_lower:
             return "Av. Ejemplo 123"
-        if "descripcion" in name_lower or "description" in name_lower:
+        if "descripcion" in name_lower or "description" in name_lower or "detalle" in name_lower:
             return "Descripción de ejemplo"
+        if "codigo" in name_lower or "code" in name_lower:
+            return "COD-001"
         return f"valor_{attr_name}"
-    if type_lower in ("integer", "int", "long"):
+    if type_lower in ("integer", "int", "long", "short", "byte"):
+        if "edad" in name_lower or "age" in name_lower:
+            return 25
+        if "cantidad" in name_lower or "stock" in name_lower or "qty" in name_lower:
+            return 10
         return 1
-    if type_lower in ("float", "double", "real", "bigdecimal"):
+    if type_lower in ("float", "double", "real", "bigdecimal", "decimal"):
+        if "precio" in name_lower or "price" in name_lower or "costo" in name_lower or "monto" in name_lower:
+            return 99.99
         return 10.5
-    if type_lower in ("boolean",):
+    if type_lower in ("boolean", "bool"):
         return True
     if type_lower in ("date", "localdate"):
         return "2026-01-15"
-    if type_lower in ("localdatetime",):
+    if type_lower in ("localdatetime", "instant", "timestamp", "zoneddatetime"):
         return "2026-01-15T10:30:00"
+    if type_lower in ("uuid",):
+        return "123e4567-e89b-12d3-a456-426614174000"
     return f"valor_{attr_name}"
 
 
@@ -69,6 +79,9 @@ class PostmanGenerator:
             ]
         }
 
+        # Health check request
+        collection["item"].append(self._generate_health_request())
+
         for cls in self.diagram.classes:
             if cls.is_interface:
                 continue
@@ -80,6 +93,39 @@ class PostmanGenerator:
     def generate_json(self, indent: int = 2) -> str:
         """Generate the collection as a JSON string."""
         return json.dumps(self.generate(), indent=indent, ensure_ascii=False)
+
+    def _generate_health_request(self) -> dict:
+        """Generate health check request for Spring Boot service."""
+        return {
+            "name": "Health Check",
+            "request": {
+                "method": "GET",
+                "header": [
+                    {"key": "Accept", "value": "application/json"}
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/api/health",
+                    "host": ["{{baseUrl}}"],
+                    "path": ["api", "health"]
+                }
+            },
+            "response": [],
+            "event": [{
+                "listen": "test",
+                "script": {
+                    "exec": [
+                        "pm.test('Status code is 200', function () {",
+                        "    pm.response.to.have.status(200);",
+                        "});",
+                        "pm.test('Service status is UP', function () {",
+                        "    var jsonData = pm.response.json();",
+                        "    pm.expect(jsonData.status).to.eql('UP');",
+                        "});"
+                    ],
+                    "type": "text/javascript"
+                }
+            }]
+        }
 
     def _generate_entity_folder(self, cls: UMLClass) -> dict:
         """Generate a folder with CRUD requests for an entity."""
@@ -113,11 +159,18 @@ class PostmanGenerator:
             "name": f"Obtener todos los {class_name}",
             "request": {
                 "method": "GET",
-                "header": [],
+                "header": [
+                    {"key": "Accept", "value": "application/json"}
+                ],
                 "url": {
                     "raw": f"{{{{baseUrl}}}}/api/{path}",
                     "host": ["{{baseUrl}}"],
-                    "path": ["api", path]
+                    "path": ["api", path],
+                    "query": [
+                        {"key": "page", "value": "0", "disabled": True, "description": "Número de página (0-index)"},
+                        {"key": "size", "value": "20", "disabled": True, "description": "Cantidad de elementos por página"},
+                        {"key": "sort", "value": "id,asc", "disabled": True, "description": "Campo y orden de ordenamiento"}
+                    ]
                 }
             },
             "response": [],

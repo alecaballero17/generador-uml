@@ -72,6 +72,27 @@ class Store:
             row = db.execute('SELECT revision,diagram FROM rooms WHERE id=?', (room,)).fetchone() if revision is None else db.execute('SELECT revision,diagram FROM revisions WHERE room=? AND revision=?', (room, revision)).fetchone()
         return None if row is None else {'revision': row[0], 'diagram': json.loads(row[1])}
 
+    def revisions(self, room):
+        with self.connect() as db:
+            rows = db.execute('SELECT revision FROM revisions WHERE room=? ORDER BY revision ASC', (room,)).fetchall()
+        return [r[0] for r in rows]
+
+    def rollback(self, room, target_revision):
+        target = self.snapshot(room, target_revision)
+        if target is None:
+            raise ValueError(f'Revision {target_revision} no existe')
+        current = self.snapshot(room)
+        if current is None:
+            raise ValueError('Sala no encontrada')
+        next_revision = current['revision'] + 1
+        encoded = json.dumps(target['diagram'])
+        with self.connect() as db:
+            changed = db.execute('UPDATE rooms SET revision=?,diagram=? WHERE id=? AND revision=?', (next_revision, encoded, room, current['revision'])).rowcount
+            if not changed:
+                raise MergeConflict('revision')
+            db.execute('INSERT INTO revisions VALUES(?,?,?)', (room, next_revision, encoded))
+        return {'revision': next_revision, 'diagram': target['diagram'], 'revertedFrom': current['revision'], 'revertedTo': target_revision}
+
     def role(self, room, token):
         digest = hashlib.sha256(token.encode()).hexdigest()
         with self.connect() as db:
@@ -150,6 +171,41 @@ async def invite(room: str, request: Request):
     if role not in ('editor', 'viewer'):
         raise HTTPException(400, 'Rol invalido')
     return {'token': store.token(room, role), 'role': role, 'projectId': room}
+
+
+@router.get('/api/collaboration/{room}/revisions')
+async def list_revisions(room: str, request: Request):
+    client_ip = request.client.host if request.client else 'unknown'
+    check_rate_limit(f'revs_{client_ip}', max_requests=60, window_seconds=60)
+    token = request.headers.get('Authorization', '').removeprefix('Bearer ')
+    if not store.role(room, token):
+        raise HTTPException(403, 'Acceso no autorizado al historial de revisiones')
+    current = store.snapshot(room)
+    if not current:
+        raise HTTPException(404, 'Sala no encontrada')
+    return {
+        'projectId': room,
+        'currentRevision': current['revision'],
+        'revisions': store.revisions(room)
+    }
+
+
+@router.post('/api/collaboration/{room}/revert/{revision}')
+async def revert_revision(room: str, revision: int, request: Request):
+    client_ip = request.client.host if request.client else 'unknown'
+    check_rate_limit(f'revert_{client_ip}', max_requests=20, window_seconds=60)
+    token = request.headers.get('Authorization', '').removeprefix('Bearer ')
+    if store.role(room, token) != 'admin':
+        raise HTTPException(403, 'Solo el administrador puede revertir revisiones')
+    async with locks.setdefault(room, asyncio.Lock()):
+        try:
+            result = store.rollback(room, revision)
+            await broadcast(room, {'type': 'snapshot', 'role': 'admin', **result})
+            return result
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        except MergeConflict:
+            raise HTTPException(409, 'Conflicto concurrente al revertir revisión')
 
 
 async def broadcast(room, message):

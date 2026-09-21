@@ -99,3 +99,69 @@ def test_reconnect_merges_offline_changes_and_isolates_rooms(tmp_path, monkeypat
         assert store.role(other['projectId'],token) is None
         persisted=collab.Store(tmp_path/'reconnect.sqlite').snapshot(room)
         assert persisted['diagram']==result['diagram']
+
+
+def test_revision_history_and_rollback(tmp_path, monkeypatch):
+    store = collab.Store(tmp_path / 'revisions.sqlite')
+    monkeypatch.setattr(collab, 'store', store)
+    monkeypatch.setattr(collab, 'connections', {})
+    monkeypatch.setattr(collab, 'locks', {})
+    monkeypatch.setattr(collab, '_rate_limits', {})
+    app = FastAPI()
+    app.include_router(collab.router)
+
+    with TestClient(app) as client:
+        project = client.post('/api/collaboration/projects', json={'diagram': diagram()}).json()
+        room = project['projectId']
+        admin_token = project['token']
+        admin_headers = {'Authorization': f'Bearer {admin_token}'}
+
+        # Create editor
+        editor_token = client.post(f'/api/collaboration/{room}/invite', headers=admin_headers, json={'role': 'editor'}).json()['token']
+        editor_headers = {'Authorization': f'Bearer {editor_token}'}
+
+        # Rev 1
+        d1 = diagram()
+        d1['classes'][0]['name'] = 'VersionUno'
+        store.update(room, 0, d1)
+
+        # Rev 2
+        d2 = diagram()
+        d2['classes'][0]['name'] = 'VersionDos'
+        store.update(room, 1, d2)
+
+        # List revisions
+        rev_resp = client.get(f'/api/collaboration/{room}/revisions', headers=editor_headers)
+        assert rev_resp.status_code == 200
+        rev_data = rev_resp.json()
+        assert rev_data['currentRevision'] == 2
+        assert rev_data['revisions'] == [0, 1, 2]
+
+        # Unauthorized cannot list
+        assert client.get(f'/api/collaboration/{room}/revisions', headers={'Authorization': 'Bearer bad'}).status_code == 403
+
+        # Editor cannot revert
+        assert client.post(f'/api/collaboration/{room}/revert/1', headers=editor_headers).status_code == 403
+
+        # Connect WebSocket to test real-time broadcast of rollback
+        with client.websocket_connect(f'/ws/collaboration/{room}') as ws:
+            ws.send_json({'token': editor_token})
+            receive_type(ws, 'snapshot')
+
+            # Admin reverts to Revision 1
+            revert_resp = client.post(f'/api/collaboration/{room}/revert/1', headers=admin_headers)
+            assert revert_resp.status_code == 200
+            revert_data = revert_resp.json()
+            assert revert_data['revision'] == 3
+            assert revert_data['diagram']['classes'][0]['name'] == 'VersionUno'
+            assert revert_data['revertedFrom'] == 2
+            assert revert_data['revertedTo'] == 1
+
+            # WebSocket received snapshot of rev 3
+            ws_snapshot = receive_type(ws, 'snapshot')
+            assert ws_snapshot['revision'] == 3
+            assert ws_snapshot['diagram']['classes'][0]['name'] == 'VersionUno'
+
+        # Invalid target revision
+        assert client.post(f'/api/collaboration/{room}/revert/99', headers=admin_headers).status_code == 400
+

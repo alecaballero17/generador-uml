@@ -2,17 +2,162 @@ let mobilePlan = null;
 
 function applyUMLPlan(plan) {
     if (collaborationState.role === 'viewer') throw new Error('Este enlace es de solo lectura');
+
+    if (plan.action === 'addRelationship') {
+        const src = state.model.classes.find(c => c.name.toLowerCase() === (plan.source || '').toLowerCase());
+        const tgt = state.model.classes.find(c => c.name.toLowerCase() === (plan.target || '').toLowerCase());
+        if (!src || !tgt) throw new Error(`No se encontraron las clases ${plan.source} y ${plan.target} para relacionar`);
+        saveUndo();
+        const rel = new UMLRelNode(plan.type || 'association', src.id, tgt.id);
+        if (plan.multiplicitySource) rel.source.multiplicity = plan.multiplicitySource;
+        if (plan.multiplicityTarget) rel.target.multiplicity = plan.multiplicityTarget;
+        state.model.addRelationship(rel);
+        renderAll();
+        persistCollaboration();
+        broadcastChange();
+        refreshMobileCards();
+        const toast = document.getElementById('mobileResultStatus');
+        if (toast) {
+            toast.textContent = `✓ Relación creada: ${src.name} ➔ ${tgt.name} (${plan.type})`;
+            setTimeout(() => { if (toast.textContent.includes(src.name)) toast.textContent = ''; }, 4000);
+        }
+        return;
+    }
+
+    if (plan.action === 'deleteRelationship') {
+        const src = state.model.classes.find(c => c.name.toLowerCase() === (plan.source || '').toLowerCase());
+        const tgt = state.model.classes.find(c => c.name.toLowerCase() === (plan.target || '').toLowerCase());
+        if (!src || !tgt) throw new Error(`No se encontraron las clases ${plan.source} y ${plan.target}`);
+        const relIndex = state.model.relationships.findIndex(r =>
+            ((r.source.classId === src.id && r.target.classId === tgt.id) ||
+             (r.source.classId === tgt.id && r.target.classId === src.id)) &&
+            (!plan.type || r.type === plan.type)
+        );
+        if (relIndex === -1) throw new Error(`No existe relación entre ${src.name} y ${tgt.name}`);
+        saveUndo();
+        state.model.relationships.splice(relIndex, 1);
+        renderAll();
+        persistCollaboration();
+        broadcastChange();
+        refreshMobileCards();
+        const toast = document.getElementById('mobileResultStatus');
+        if (toast) {
+            toast.textContent = `✓ Relación eliminada entre ${src.name} y ${tgt.name}`;
+            setTimeout(() => { if (toast.textContent.includes(src.name)) toast.textContent = ''; }, 4000);
+        }
+        return;
+    }
+
+    if (plan.action === 'removeAttribute') {
+        const name = (plan.name || '').trim();
+        const existing = state.model.classes.find(c => c.name.toLowerCase() === name.toLowerCase());
+        if (!existing) throw new Error(`No existe la clase «${name}»`);
+        const attr = existing.attributes.find(a => a.name.toLowerCase() === (plan.attributeName || '').toLowerCase());
+        if (!attr) throw new Error(`No existe el atributo «${plan.attributeName}» en ${existing.name}`);
+        saveUndo();
+        existing.removeAttribute(attr.id);
+        renderAll();
+        persistCollaboration();
+        broadcastChange();
+        refreshMobileCards();
+        const toast = document.getElementById('mobileResultStatus');
+        if (toast) {
+            toast.textContent = `✓ Atributo ${plan.attributeName} eliminado de ${existing.name}`;
+            setTimeout(() => { if (toast.textContent.includes(existing.name)) toast.textContent = ''; }, 4000);
+        }
+        return;
+    }
+
+    if (plan.action === 'addOperation' || plan.action === 'addOperations') {
+        const existing = state.model.classes.find(c => c.name.toLowerCase() === (plan.name || '').toLowerCase());
+        if (!existing) throw new Error('No existe la clase indicada');
+        const ops = plan.operations || (plan.operation ? [plan.operation] : []);
+        if (!ops.length) throw new Error('No se especificó ninguna operación');
+        for (const op of ops) {
+            if (existing.operations.some(o => o.name.toLowerCase() === op.name.toLowerCase())) {
+                throw new Error(`El método «${op.name}» ya existe en ${existing.name}`);
+            }
+        }
+        saveUndo();
+        for (const op of ops) {
+            existing.addOperation({
+                id: crypto.randomUUID(),
+                name: op.name,
+                returnType: op.returnType || 'void',
+                visibility: op.visibility || '+',
+                parameters: op.parameters || [],
+                isAbstract: !!op.isAbstract,
+                isStatic: !!op.isStatic,
+                isConstructor: !!op.isConstructor
+            });
+        }
+        renderAll();
+        persistCollaboration();
+        broadcastChange();
+        refreshMobileCards();
+        const toast = document.getElementById('mobileResultStatus');
+        if (toast) {
+            toast.textContent = `✓ Método agregado a ${existing.name}: ${ops.map(o => o.name).join(', ')}`;
+            setTimeout(() => { if (toast.textContent.includes(existing.name)) toast.textContent = ''; }, 4000);
+        }
+        return;
+    }
+
+    if (plan.action === 'renameClass') {
+        const oldName = (plan.oldName || plan.name || '').trim();
+        const newName = (plan.newName || '').trim();
+        const existing = state.model.classes.find(c => c.name.toLowerCase() === oldName.toLowerCase());
+        if (!existing) throw new Error(`No existe la clase «${oldName}»`);
+        const collision = state.model.classes.find(c => c.name.toLowerCase() === newName.toLowerCase());
+        if (collision) throw new Error(`Ya existe una clase con el nombre «${newName}»`);
+        saveUndo();
+        existing.name = newName;
+        renderAll();
+        persistCollaboration();
+        broadcastChange();
+        refreshMobileCards();
+        const toast = document.getElementById('mobileResultStatus');
+        if (toast) {
+            toast.textContent = `✓ Clase ${oldName} renombrada a ${newName}`;
+            setTimeout(() => { if (toast.textContent.includes(newName)) toast.textContent = ''; }, 4000);
+        }
+        return;
+    }
+
+    if (plan.action === 'deleteOperation' || plan.action === 'removeOperation') {
+        const name = (plan.name || '').trim();
+        const opName = (plan.operationName || plan.operation || '').trim();
+        const existing = state.model.classes.find(c => c.name.toLowerCase() === name.toLowerCase());
+        if (!existing) throw new Error(`No existe la clase «${name}»`);
+        const op = existing.operations.find(o => o.name.toLowerCase() === opName.toLowerCase());
+        if (!op) throw new Error(`No existe el método «${opName}» en ${existing.name}`);
+        saveUndo();
+        existing.removeOperation(op.id);
+        renderAll();
+        persistCollaboration();
+        broadcastChange();
+        refreshMobileCards();
+        const toast = document.getElementById('mobileResultStatus');
+        if (toast) {
+            toast.textContent = `✓ Método ${opName} eliminado de ${existing.name}`;
+            setTimeout(() => { if (toast.textContent.includes(existing.name)) toast.textContent = ''; }, 4000);
+        }
+        return;
+    }
+
     const existing = state.model.classes.find(c => c.name.toLowerCase() === plan.name.toLowerCase());
     if (plan.action === 'createClass' && existing) throw new Error('Esa clase ya existe; usa Agrega atributo');
     if (plan.action !== 'createClass' && !existing) throw new Error('No existe la clase indicada');
-    if (plan.action === 'addAttributes' && plan.attributes.some(a => existing.attributes.some(b => a.name.toLowerCase() === b.name.toLowerCase()))) throw new Error('Uno de los atributos ya existe');
+    if (plan.action === 'addAttributes' && (plan.attributes || []).some(a => existing.attributes.some(b => a.name.toLowerCase() === b.name.toLowerCase()))) throw new Error('Uno de los atributos ya existe');
     
     saveUndo();
     if (plan.action === 'deleteClass') {
         state.model.removeClass(existing.id);
     } else {
         const cls = existing || new UMLClassNode(plan.name, 60 + state.model.classes.length * 240, 100);
-        for (const attr of plan.attributes) {
+        if (plan.isInterface) cls.isInterface = true;
+        if (plan.isAbstract) cls.isAbstract = true;
+        for (const attr of (plan.attributes || [])) {
             cls.addAttribute({ ...attr, id: crypto.randomUUID(), visibility: ['+', '-', '#', '~'].includes(attr.visibility) ? attr.visibility : '-', constraints: [] });
         }
         for (const operation of plan.operations || []) cls.addOperation({...operation, id:crypto.randomUUID()});
@@ -37,9 +182,29 @@ function applyUMLPlan(plan) {
 function reviewMobileCommand() {
     try {
         mobilePlan = UMLCommands.parse($('#mobileCommand').value);
-        const summary = mobilePlan.action === 'deleteClass'
-            ? `Eliminar ${mobilePlan.name} y sus relaciones`
-            : `${mobilePlan.action === 'createClass' ? 'Crear' : 'Agregar a'} ${mobilePlan.name}: ${mobilePlan.attributes.map(a => `${a.name}: ${a.type}`).join(', ') || 'sin atributos'}`;
+        let summary = '';
+        if (mobilePlan.action === 'deleteClass') {
+            summary = `Eliminar ${mobilePlan.name} y sus relaciones`;
+        } else if (mobilePlan.action === 'addRelationship') {
+            summary = `Relación [${mobilePlan.type}]: ${mobilePlan.source} ➔ ${mobilePlan.target}`;
+        } else if (mobilePlan.action === 'deleteRelationship') {
+            summary = `Eliminar relación entre ${mobilePlan.source} y ${mobilePlan.target}`;
+        } else if (mobilePlan.action === 'removeAttribute') {
+            summary = `Eliminar atributo ${mobilePlan.attributeName} de ${mobilePlan.name}`;
+        } else if (mobilePlan.action === 'addOperation' || mobilePlan.action === 'addOperations') {
+            const ops = mobilePlan.operations || (mobilePlan.operation ? [mobilePlan.operation] : []);
+            summary = `Agregar método a ${mobilePlan.name}: ${ops.map(o => `${o.visibility || '+'}${o.name}(${(o.parameters||[]).map(p=>p.name+': '+p.type).join(', ')}) : ${o.returnType || 'void'}`).join(', ')}`;
+        } else if (mobilePlan.action === 'renameClass') {
+            summary = `Renombrar clase ${mobilePlan.oldName} a ${mobilePlan.newName}`;
+        } else if (mobilePlan.action === 'deleteOperation' || mobilePlan.action === 'removeOperation') {
+            summary = `Eliminar método ${mobilePlan.operationName} de ${mobilePlan.name}`;
+        } else if (mobilePlan.isInterface) {
+            summary = `Crear interfaz ${mobilePlan.name}`;
+        } else if (mobilePlan.isAbstract) {
+            summary = `Crear clase abstracta ${mobilePlan.name}: ${(mobilePlan.attributes || []).map(a => `${a.name}: ${a.type}`).join(', ') || 'sin atributos'}`;
+        } else {
+            summary = `${mobilePlan.action === 'createClass' ? 'Crear' : 'Agregar a'} ${mobilePlan.name}: ${(mobilePlan.attributes || []).map(a => `${a.name}: ${a.type}`).join(', ') || 'sin atributos'}`;
+        }
         $('#mobileReview').textContent = summary;
         $('#applyMobileCommand').disabled = false;
     } catch (e) {
@@ -171,19 +336,82 @@ function refreshMobileCards() {
             }
         }
 
-        // Footer action
+        // Operations list
+        const opsList = document.createElement('ul');
+        opsList.className = 'mobile-attr-list mobile-ops-list';
+        if (cls.operations && cls.operations.length) {
+            const opsHeader = document.createElement('li');
+            opsHeader.style.cssText = 'color:var(--text-secondary); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; padding:6px 8px 2px;';
+            opsHeader.textContent = 'Métodos';
+            opsList.append(opsHeader);
+
+            for (const op of cls.operations) {
+                const li = document.createElement('li');
+                li.className = 'mobile-attr-item mobile-op-item';
+
+                const left = document.createElement('div');
+                left.className = 'attr-item-left';
+                const vis = document.createElement('span');
+                vis.className = 'attr-vis-badge';
+                vis.style.background = 'rgba(99, 102, 241, 0.15)';
+                vis.style.color = '#818cf8';
+                vis.textContent = op.visibility || '+';
+                const name = document.createElement('span');
+                name.className = 'attr-name-text';
+                const paramStr = (op.parameters || []).map(p => `${p.name}: ${p.type}`).join(', ');
+                name.textContent = `${op.name}(${paramStr})`;
+                left.append(vis, name);
+
+                const right = document.createElement('div');
+                right.className = 'attr-item-right';
+                const badge = document.createElement('span');
+                badge.className = `type-badge ${getTypeBadgeClass(op.returnType || 'void')}`;
+                badge.textContent = op.returnType || 'void';
+
+                const delOp = document.createElement('button');
+                delOp.type = 'button';
+                delOp.className = 'btn-del-attr';
+                delOp.textContent = '×';
+                delOp.title = `Eliminar método ${op.name}`;
+                delOp.onclick = (e) => {
+                    e.stopPropagation();
+                    if (collaborationState.role === 'viewer') return;
+                    saveUndo();
+                    cls.removeOperation(op.id);
+                    renderAll();
+                    persistCollaboration();
+                    broadcastChange();
+                    refreshMobileCards();
+                };
+
+                right.append(badge, delOp);
+                li.append(left, right);
+                opsList.append(li);
+            }
+        }
+
+        // Action buttons
+        const actionsRow = document.createElement('div');
+        actionsRow.className = 'mobile-card-actions';
+        actionsRow.style.cssText = 'display:flex; gap:8px; margin-top:8px;';
+
         const addAttrBtn = document.createElement('button');
         addAttrBtn.type = 'button';
         addAttrBtn.className = 'btn-add-attr-card';
-        addAttrBtn.innerHTML = `<span>+</span> Agregar Atributo`;
+        addAttrBtn.style.flex = '1';
+        addAttrBtn.innerHTML = `<span>+</span> Atributo`;
         addAttrBtn.onclick = () => openMobileForm(cls.name);
 
-        const operationsList = document.createElement('div');
-        for (const operation of cls.operations || []) {
-            const row=document.createElement('p');row.textContent=`${operation.visibility || '+'} ${operation.name}(${(operation.parameters||[]).map(p=>p.name+': '+p.type).join(', ')}) : ${operation.returnType || 'void'}`;
-            operationsList.append(row);
-        }
-        card.append(header, attrsList, operationsList, addAttrBtn);
+        const addOpBtn = document.createElement('button');
+        addOpBtn.type = 'button';
+        addOpBtn.className = 'btn-add-attr-card';
+        addOpBtn.style.flex = '1';
+        addOpBtn.style.borderColor = 'rgba(99, 102, 241, 0.5)';
+        addOpBtn.innerHTML = `<span>+</span> Método`;
+        addOpBtn.onclick = () => openMobileOperationForm(cls.name);
+
+        actionsRow.append(addAttrBtn, addOpBtn);
+        card.append(header, attrsList, opsList, actionsRow);
         container.append(card);
     }
 }
@@ -580,6 +808,134 @@ function openMobileRelationship(candidate = null) {
         }catch(error){dialog.querySelector('[role=alert]').textContent=error.message;}
     };
     document.body.append(dialog);dialog.showModal();
+}
+
+function openMobileOperationForm(className) {
+    if (collaborationState.role === 'viewer') {
+        if (typeof showToast === 'function') showToast('Este proyecto es de solo lectura', 'warning');
+        return;
+    }
+    const cls = state.model.classes.find(c => c.name.toLowerCase() === (className || '').toLowerCase());
+    if (!cls) {
+        if (typeof showToast === 'function') showToast('Clase no encontrada', 'error');
+        return;
+    }
+
+    const dialog = document.createElement('dialog');
+    dialog.className = 'mobile-bottom-sheet';
+    dialog.innerHTML = `
+        <form class="mobile-sheet-form">
+            <div class="sheet-header">
+                <div class="sheet-title-group">
+                    <span class="sheet-header-icon">⚙️</span>
+                    <h2>Agregar método a ${cls.name}</h2>
+                </div>
+                <button type="button" class="sheet-close-btn" id="btnCancelOpX" aria-label="Cerrar">×</button>
+            </div>
+            <div class="sheet-body">
+                <label class="sheet-field-label">
+                    <span class="label-title">Nombre del método</span>
+                    <input name="opName" class="sheet-input" placeholder="Ej: calcularTotal, validar, procesar" required autocomplete="off">
+                </label>
+                <div class="fields-row" style="display:flex; gap:8px;">
+                    <label class="sheet-field-label" style="flex:1;">
+                        <span class="label-title">Retorno</span>
+                        <select name="returnType" class="sheet-select">
+                            <option value="void">void (Sin retorno)</option>
+                            <option value="String">String (Texto)</option>
+                            <option value="Integer">Integer (Entero)</option>
+                            <option value="Double">Double (Decimal)</option>
+                            <option value="Boolean">Boolean (Booleano)</option>
+                            <option value="LocalDate">LocalDate (Fecha)</option>
+                            <option value="Long">Long (ID)</option>
+                        </select>
+                    </label>
+                    <label class="sheet-field-label" style="flex:1;">
+                        <span class="label-title">Visibilidad</span>
+                        <select name="visibility" class="sheet-select">
+                            <option value="+">Público (+)</option>
+                            <option value="-">Privado (-)</option>
+                            <option value="#">Protegido (#)</option>
+                            <option value="~">Paquete (~)</option>
+                        </select>
+                    </label>
+                </div>
+                <label class="sheet-field-label">
+                    <span class="label-title">Parámetros (Opcional, Ej: monto: Double, activo: Boolean)</span>
+                    <input name="parameters" class="sheet-input" placeholder="Ej: monto: Double" autocomplete="off">
+                </label>
+                <p class="sheet-error-msg" role="alert" style="color:var(--danger, #ef4444); font-size:13px; margin-top:4px;"></p>
+            </div>
+            <div class="sheet-footer" style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+                <button type="button" class="btn-secondary" id="btnCancelOp">Cancelar</button>
+                <button type="submit" class="btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Guardar Método
+                </button>
+            </div>
+        </form>
+    `;
+
+    const form = dialog.querySelector('form');
+    const errEl = dialog.querySelector('[role=alert]');
+    const closeDialog = () => { dialog.close(); dialog.remove(); };
+    dialog.querySelector('#btnCancelOp').onclick = closeDialog;
+    dialog.querySelector('#btnCancelOpX').onclick = closeDialog;
+
+    form.onsubmit = (e) => {
+        e.preventDefault();
+        try {
+            if (collaborationState.role === 'viewer') throw new Error('Este proyecto es de solo lectura');
+            const targetCls = state.model.classes.find(c => c.id === cls.id);
+            if (!targetCls) throw new Error('La clase ya no existe');
+
+            const opNameRaw = form.elements.opName.value.trim();
+            const opName = UMLCommands.identifier(opNameRaw);
+            if (targetCls.operations.some(o => o.name.toLowerCase() === opName.toLowerCase())) {
+                throw new Error(`El método «${opName}» ya existe en ${targetCls.name}`);
+            }
+
+            const rawParams = (form.elements.parameters.value || '').trim();
+            const parameters = rawParams ? rawParams.split(',').map(raw => {
+                const pMatch = raw.trim().match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\[\])?))?$/);
+                if (!pMatch) throw new Error('Parámetro inválido; usa nombre: Tipo');
+                return { name: UMLCommands.identifier(pMatch[1]), type: pMatch[2] || 'String' };
+            }) : [];
+
+            if (new Set(parameters.map(p => p.name.toLowerCase())).size !== parameters.length) {
+                throw new Error('Parámetros repetidos en el método');
+            }
+
+            saveUndo();
+            targetCls.addOperation({
+                id: crypto.randomUUID(),
+                name: opName,
+                returnType: form.elements.returnType.value || 'void',
+                visibility: form.elements.visibility.value || '+',
+                parameters,
+                isAbstract: false,
+                isStatic: false,
+                isConstructor: false
+            });
+
+            renderAll();
+            persistCollaboration();
+            broadcastChange();
+            refreshMobileCards();
+
+            if (typeof showToast === 'function') {
+                showToast(`Método «${opName}» agregado a ${targetCls.name}`, 'success');
+            }
+            closeDialog();
+        } catch (err) {
+            if (errEl) errEl.textContent = err.message;
+        }
+    };
+
+    document.body.append(dialog);
+    dialog.showModal();
+    const nameInput = form.querySelector('[name="opName"]');
+    if (nameInput) nameInput.focus();
 }
 
 function renderPhotoConnections(result, container = null) {

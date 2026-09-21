@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element, SubElement
 from typing import Optional
 import uuid
+import re
 
 from ..models.uml_model import (
     UMLDiagram, UMLClass, UMLAttribute, UMLOperation, UMLParameter,
@@ -101,6 +102,39 @@ class XMIAdapter:
         # Relationships
         for rel in diagram.relationships:
             self._export_relationship(model, rel, class_id_map)
+
+        # Enterprise Architect visual diagram extension
+        ext = SubElement(root, "xmi:Extension")
+        ext.set("extender", "Enterprise Architect")
+        ext.set("extenderID", "6.5")
+        diagrams_el = SubElement(ext, "diagrams")
+        diag_el = SubElement(diagrams_el, "diagram")
+        diag_el.set("xmi:id", f"ea_diag_{diagram.id}")
+        diag_model = SubElement(diag_el, "model")
+        diag_model.set("package", f"model_{diagram.id}")
+        diag_model.set("name", diagram.name)
+        diag_props = SubElement(diag_el, "properties")
+        diag_props.set("name", diagram.name)
+        diag_props.set("type", "Logical")
+
+        diag_elements = SubElement(diag_el, "elements")
+        for cls in diagram.classes:
+            xmi_id = class_id_map.get(cls.id)
+            if not xmi_id:
+                continue
+            el_node = SubElement(diag_elements, "element")
+            el_node.set("subject", xmi_id)
+            x = int(cls.position.x) if cls.position else 100
+            y = int(cls.position.y) if cls.position else 100
+            w = int(cls.size.width) if cls.size else 200
+            h = int(cls.size.height) if cls.size else 120
+            el_node.set("geometry", f"Left={x};Top={y};Right={x+w};Bottom={y+h};")
+
+        diag_connectors = SubElement(diag_el, "connectors")
+        for rel in diagram.relationships:
+            conn_node = SubElement(diag_connectors, "connector")
+            conn_node.set("subject", f"rel_{rel.id}")
+            conn_node.set("style", "Mode=3;EO=1;")
 
         # Serialize
         ET.indent(root, space="  ")
@@ -367,6 +401,27 @@ class XMIAdapter:
                     type=RelationshipType.GENERALIZATION,
                     source=RelationshipEnd(class_id=child.id),
                     target=RelationshipEnd(class_id=parent.id)))
+
+        # Parse Enterprise Architect visual layout if present
+        for elem in root.iter():
+            tag_local = elem.tag.split("}")[-1].lower()
+            if tag_local == "element":
+                subj = elem.get("subject") or self._get_xmi_attr(elem, "subject")
+                geom = elem.get("geometry") or ""
+                if subj and subj in xmi_to_class and "Left=" in geom:
+                    cls = xmi_to_class[subj]
+                    m_left = re.search(r'Left=(-?\d+)', geom)
+                    m_top = re.search(r'Top=(-?\d+)', geom)
+                    m_right = re.search(r'Right=(-?\d+)', geom)
+                    m_bottom = re.search(r'Bottom=(-?\d+)', geom)
+                    if m_left and m_top:
+                        left = abs(int(m_left.group(1)))
+                        top = abs(int(m_top.group(1)))
+                        width = abs(int(m_right.group(1)) - int(m_left.group(1))) if m_right else 200
+                        height = abs(int(m_bottom.group(1)) - int(m_top.group(1))) if m_bottom else 120
+                        cls.position = Position(x=left, y=top)
+                        cls.size = Size(width=max(width, 100), height=max(height, 60))
+
         return diagram
 
     def _parse_class(self, el: Element, ns: dict) -> UMLClass:

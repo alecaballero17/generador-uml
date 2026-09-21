@@ -339,6 +339,36 @@ class TestFlutterFullGeneration:
                     # No debe haber camelCase en las rutas
                     assert "Api" not in content.split("api/")[1][:20] or True
 
+    def test_flutter_model_operations(self):
+        """Verifica que las operaciones UML se generen en los modelos Dart de Flutter."""
+        diagram = _build_veterinaria_diagram()
+        gen = FlutterGenerator(diagram)
+        files = gen.generate_all()
+
+        persona_dart = files.get("lib/models/persona.dart", "")
+        assert "String getNombreCompleto()" in persona_dart, \
+            "lib/models/persona.dart debe contener el método getNombreCompleto()"
+
+    def test_flutter_abstract_and_interface_models(self):
+        """Verifica que interfaces y clases abstractas generen modelos Dart abstractos."""
+        diagram = _build_veterinaria_diagram()
+        iface = UMLClass(
+            id="exportable",
+            name="Exportable",
+            is_interface=True,
+            operations=[
+                UMLOperation(name="exportarPdf", return_type="String", parameters=[])
+            ]
+        )
+        diagram.classes.append(iface)
+        gen = FlutterGenerator(diagram)
+        files = gen.generate_all()
+
+        assert "lib/models/exportable.dart" in files
+        content = files["lib/models/exportable.dart"]
+        assert "Exportable" in content
+        assert "exportarPdf" in content
+
 
 class TestPostmanGeneration:
     """Tests de generación de colección Postman."""
@@ -368,5 +398,21 @@ class TestPostmanGeneration:
         gen = PostmanGenerator(diagram)
         data = gen.generate()
 
-        # Verificar que existen items
-        assert len(data.get("item", [])) >= 1
+        # Verificar que existen items y que incluye Health Check
+        items = data.get("item", [])
+        assert len(items) >= 1
+        health_items = [it for it in items if it.get("name") == "Health Check"]
+        assert len(health_items) == 1, "Debe incluir el endpoint de Health Check"
+        assert health_items[0]["request"]["url"]["path"] == ["api", "health"]
+
+        # Verificar carpetas de entidad y query params de paginación
+        entity_folders = [it for it in items if "item" in it]
+        assert len(entity_folders) >= 1
+        first_folder = entity_folders[0]
+        get_all_req = next(r for r in first_folder["item"] if r["name"].startswith("Obtener todos"))
+        assert "query" in get_all_req["request"]["url"]
+        query_keys = [q["key"] for q in get_all_req["request"]["url"]["query"]]
+        assert "page" in query_keys
+        assert "size" in query_keys
+        assert "sort" in query_keys
+

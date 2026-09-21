@@ -60,6 +60,10 @@ Tipos de acciones soportadas en 'actions':
 - updateAttribute: { "action": "updateAttribute", "name": string, "oldAttributeName": string, "newAttributeName": string, "type": string }
 - deleteClass: { "action": "deleteClass", "name": string }
 - addRelationship: { "action": "addRelationship", "source": string, "target": string, "type": "association"|"aggregation"|"composition"|"generalization"|"realization"|"dependency", "multiplicitySource": string, "multiplicityTarget": string }
+- deleteRelationship: { "action": "deleteRelationship", "source": string, "target": string, "type": string (opcional) }
+- addOperation: { "action": "addOperation", "name": string, "operationName": string, "returnType": string, "parameters": [{ "name": string, "type": string }] }
+- deleteOperation: { "action": "deleteOperation", "name": string, "operationName": string }
+- renameClass: { "action": "renameClass", "oldName": string, "newName": string }
 
 DEBES responder SIEMPRE en formato JSON estricto con esta estructura:
 {

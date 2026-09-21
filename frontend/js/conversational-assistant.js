@@ -202,6 +202,9 @@ const ConversationalAssistant = (function() {
             let existing = state.model.classes.find(c => c.name.toLowerCase() === name.toLowerCase());
             if (!existing) {
                 const cls = new UMLClassNode(name, 60 + state.model.classes.length * 240, 100);
+                if (act.isInterface) cls.isInterface = true;
+                if (act.isAbstract) cls.isAbstract = true;
+                if (act.stereotype) cls.stereotype = act.stereotype;
                 if (act.attributes && Array.isArray(act.attributes)) {
                     for (const a of act.attributes) {
                         cls.addAttribute({
@@ -214,7 +217,7 @@ const ConversationalAssistant = (function() {
                     }
                 }
                 state.model.addClass(cls);
-                changeDesc = `Clase ${name} creada`;
+                changeDesc = `${act.isInterface ? 'Interfaz' : act.isAbstract ? 'Clase abstracta' : 'Clase'} ${name} creada`;
             } else if (act.attributes && Array.isArray(act.attributes)) {
                 for (const a of act.attributes) {
                     if (!existing.attributes.some(attr => attr.name.toLowerCase() === a.name.toLowerCase())) {
@@ -281,22 +284,100 @@ const ConversationalAssistant = (function() {
                 state.model.addRelationship(rel);
                 changeDesc = `Relación ${src.name} ➔ ${tgt.name}`;
             }
+        } else if (actionType === 'deleteRelationship') {
+            const src = state.model.classes.find(c => c.name.toLowerCase() === (act.source || '').toLowerCase());
+            const tgt = state.model.classes.find(c => c.name.toLowerCase() === (act.target || '').toLowerCase());
+            if (src && tgt) {
+                const relIndex = state.model.relationships.findIndex(r =>
+                    ((r.source.classId === src.id && r.target.classId === tgt.id) ||
+                     (r.source.classId === tgt.id && r.target.classId === src.id)) &&
+                    (!act.type || r.type === act.type)
+                );
+                if (relIndex !== -1) {
+                    state.model.relationships.splice(relIndex, 1);
+                    changeDesc = `Relación entre ${src.name} y ${tgt.name} eliminada`;
+                }
+            }
+        } else if (actionType === 'addOperation') {
+            const name = (act.name || '').trim();
+            const existing = state.model.classes.find(c => c.name.toLowerCase() === name.toLowerCase());
+            if (existing) {
+                const opName = (act.operationName || act.operation || '').trim();
+                if (opName && !existing.operations.some(o => o.name.toLowerCase() === opName.toLowerCase())) {
+                    existing.addOperation({
+                        id: crypto.randomUUID(),
+                        name: opName,
+                        parameters: Array.isArray(act.parameters) ? act.parameters : [],
+                        returnType: act.returnType || 'void',
+                        visibility: act.visibility || '+'
+                    });
+                    changeDesc = `Método ${opName} agregado a ${name}`;
+                }
+            }
+        } else if (actionType === 'renameClass') {
+            const oldName = (act.oldName || act.name || '').trim();
+            const newName = (act.newName || act.targetName || '').trim();
+            if (oldName && newName) {
+                const existing = state.model.classes.find(c => c.name.toLowerCase() === oldName.toLowerCase());
+                const targetCollision = state.model.classes.find(c => c.name.toLowerCase() === newName.toLowerCase());
+                if (existing && !targetCollision) {
+                    existing.name = newName;
+                    changeDesc = `Clase ${oldName} renombrada a ${newName}`;
+                }
+            }
+        } else if (actionType === 'deleteOperation' || actionType === 'removeOperation') {
+            const name = (act.name || '').trim();
+            const opName = (act.operationName || act.operation || '').trim();
+            const existing = state.model.classes.find(c => c.name.toLowerCase() === name.toLowerCase());
+            if (existing && opName) {
+                const beforeLen = existing.operations.length;
+                existing.operations = existing.operations.filter(o => o.name.toLowerCase() !== opName.toLowerCase());
+                if (existing.operations.length < beforeLen) {
+                    changeDesc = `Método ${opName} eliminado de ${name}`;
+                }
+            }
         }
         return changeDesc;
     }
 
     function executeAction(act) {
         if(collaborationState.role==='viewer')throw new Error('Este enlace es de solo lectura.');
-        const allowed=['createClass','addAttributes','updateAttribute','removeAttribute','deleteClass','addRelationship'];
+        const allowed=['createClass','addAttributes','updateAttribute','removeAttribute','deleteClass','addRelationship','deleteRelationship','addOperation','deleteOperation','removeOperation','renameClass'];
         if(!act||!allowed.includes(act.action))throw new Error('La acción propuesta no está disponible.');
         const identifier=value=>{if(typeof value!=='string'||!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value))throw new Error('El nombre propuesto no es válido.');};
-        const types=['String','Integer','Double','Boolean','LocalDate','Long'];
+        const types=['String','Integer','Double','Boolean','LocalDate','Long','void'];
         if(act.name)identifier(act.name);
         if(act.attributes!==undefined&&!Array.isArray(act.attributes))throw new Error('Atributos inválidos.');
         for(const attr of act.attributes||[]){identifier(attr.name);if(!types.includes(attr.type))throw new Error('Tipo de atributo no admitido.');}
         if(act.newAttributeName)identifier(act.newAttributeName);
         if(act.type && act.action==='updateAttribute'&&!types.includes(act.type))throw new Error('Tipo de atributo no admitido.');
         if(act.action==='addRelationship'&&!['association','aggregation','composition','generalization','realization','dependency'].includes(act.type))throw new Error('Tipo de relación no admitido.');
+        if(act.action==='deleteRelationship'&&act.type&&!['association','aggregation','composition','generalization','realization','dependency'].includes(act.type))throw new Error('Tipo de relación no admitido.');
+        if(act.action==='addOperation') {
+            const opName = (act.operationName || act.operation || '').trim();
+            if(!opName) throw new Error('Nombre de operación no especificado.');
+            identifier(opName);
+            if(act.returnType && !types.includes(act.returnType)) throw new Error('Tipo de retorno no admitido.');
+            if(act.parameters) {
+                if(!Array.isArray(act.parameters)) throw new Error('Parámetros inválidos.');
+                for(const p of act.parameters) {
+                    if(p.name) identifier(p.name);
+                    if(p.type && !types.includes(p.type)) throw new Error('Tipo de parámetro no admitido.');
+                }
+            }
+        }
+        if(act.action==='renameClass') {
+            const oldName = (act.oldName || act.name || '').trim();
+            const newName = (act.newName || act.targetName || '').trim();
+            if(!oldName || !newName) throw new Error('Nombres para renombrar incompletos.');
+            identifier(oldName);
+            identifier(newName);
+        }
+        if(act.action==='deleteOperation' || act.action==='removeOperation') {
+            const opName = (act.operationName || act.operation || '').trim();
+            if(!opName) throw new Error('Nombre de operación no especificado.');
+            identifier(opName);
+        }
         const before=JSON.stringify(state.model.toJSON());
         const result=executeActionUnchecked(act);
         if(before===JSON.stringify(state.model.toJSON()))throw new Error('No hubo cambios: el elemento no existe o ya tiene esos datos.');

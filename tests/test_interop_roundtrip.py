@@ -157,6 +157,24 @@ class TestXMIRoundtrip:
         assert "<?xml" in xmi_str or "xmi:" in xmi_str
         assert "uml:Model" in xmi_str or "UML:" in xmi_str
 
+    def test_xmi_visual_layout_preserved(self):
+        """Verifica que el layout visual de Enterprise Architect se genere y se recupere en roundtrip."""
+        original = _build_test_diagram()
+        adapter = XMIAdapter()
+
+        xmi_str = adapter.export_to_xmi(original)
+        assert "Enterprise Architect" in xmi_str
+        assert "geometry=" in xmi_str
+
+        reimported = adapter.import_from_xmi(xmi_str)
+        for orig_cls in original.classes:
+            reimp_cls = next(c for c in reimported.classes if c.name == orig_cls.name)
+            assert reimp_cls.position.x == orig_cls.position.x
+            assert reimp_cls.position.y == orig_cls.position.y
+            assert reimp_cls.size.width == orig_cls.size.width
+            assert reimp_cls.size.height == orig_cls.size.height
+
+
 
 class TestMDJRoundtrip:
     """Roundtrip completo MDJ (StarUML): crear → exportar → importar → verificar."""
@@ -192,6 +210,30 @@ class TestMDJRoundtrip:
         assert data["_type"] == "Project"
         assert "ownedElements" in data
 
+    def test_positions_and_visual_diagram_preserved(self):
+        """Verifica que las coordenadas y dimensiones visuales se exporten e importen fielmente."""
+        original = _build_test_diagram()
+        adapter = MDJAdapter()
+
+        mdj_str = adapter.export_to_mdj(original)
+        data = json.loads(mdj_str)
+
+        model = data["ownedElements"][0]
+        # Debe contener un UMLClassDiagram
+        diagram_node = next((el for el in model["ownedElements"] if el.get("_type") == "UMLClassDiagram"), None)
+        class_views = [v for v in diagram_node["ownedViews"] if "ClassView" in v["_type"] or "InterfaceView" in v["_type"]]
+        assert len(class_views) == len(original.classes)
+        rel_views = [v for v in diagram_node["ownedViews"] if "View" in v["_type"] and v not in class_views]
+        assert len(rel_views) == len(original.relationships)
+
+        reimported = adapter.import_from_mdj(mdj_str)
+        for orig_cls in original.classes:
+            reimp_cls = next(c for c in reimported.classes if c.name == orig_cls.name)
+            assert reimp_cls.position.x == orig_cls.position.x
+            assert reimp_cls.position.y == orig_cls.position.y
+            assert reimp_cls.size.width == orig_cls.size.width
+            assert reimp_cls.size.height == orig_cls.size.height
+
     def test_double_roundtrip_stability(self):
         """Exportar → importar → exportar → importar debe dar el mismo resultado."""
         original = _build_test_diagram()
@@ -204,6 +246,46 @@ class TestMDJRoundtrip:
 
         assert len(reimp1.classes) == len(reimp2.classes)
         assert {c.name for c in reimp1.classes} == {c.name for c in reimp2.classes}
+
+    def test_mdj_attribute_and_parameter_extended_metadata_roundtrip(self):
+        """Verifica que multiplicidad, valor por defecto y atributos derivados se preserven en MDJ."""
+        diagram = UMLDiagram(name="MetadataModel")
+        cls = UMLClass(id="c1", name="Producto")
+        attr = UMLAttribute(
+            id="a1",
+            name="codigos",
+            type="String",
+            multiplicity="0..*",
+            default_value="'DEFAULT'",
+            is_derived=True,
+        )
+        op = UMLOperation(
+            id="o1",
+            name="aplicarDescuento",
+            return_type="Double",
+            parameters=[
+                UMLParameter(id="p1", name="tasa", type="Double", default_value="0.10")
+            ]
+        )
+        cls.attributes.append(attr)
+        cls.operations.append(op)
+        diagram.add_class(cls)
+
+        adapter = MDJAdapter()
+        mdj_str = adapter.export_to_mdj(diagram)
+        reimported = adapter.import_from_mdj(mdj_str)
+
+        r_cls = reimported.get_class("c1") or reimported.classes[0]
+        r_attr = r_cls.attributes[0]
+        assert r_attr.name == "codigos"
+        assert r_attr.multiplicity == "0..*"
+        assert r_attr.default_value == "'DEFAULT'"
+        assert r_attr.is_derived is True
+
+        r_op = r_cls.operations[0]
+        assert r_op.name == "aplicarDescuento"
+        assert len(r_op.parameters) == 1
+        assert r_op.parameters[0].default_value == "0.10"
 
     def test_enterprise_architect_xmi_compatibility(self):
         """Verifica la importación de XMI estilo Sparx Enterprise Architect con namespaces específicos e idref."""
@@ -244,3 +326,17 @@ class TestMDJRoundtrip:
         assert rel.type == RelationshipType.COMPOSITION
         factura = next(c for c in diagram.classes if c.name == "Factura")
         assert len(factura.attributes) == 2
+
+    def test_ea_connectors_and_diagram_extension_exported(self):
+        """Verifica que el exportador XMI genere elementos y conectores para Sparx Enterprise Architect."""
+        original = _build_test_diagram()
+        adapter = XMIAdapter()
+        xml_str = adapter.export_to_xmi(original)
+
+        assert '<xmi:Extension extender="Enterprise Architect"' in xml_str
+        assert '<diagrams>' in xml_str
+        assert '<elements>' in xml_str
+        assert '<connectors>' in xml_str
+        assert 'geometry="Left=' in xml_str
+        for rel in original.relationships:
+            assert f'subject="rel_{rel.id}"' in xml_str

@@ -1,4 +1,40 @@
 const localAI={worker:null,pending:null,recorder:null,stream:null,chunks:[],timer:null};
+function supplementPhotoDraft(text, command) {
+    const correction=command.trim().replace(/[.!?]+$/,'').match(/^en (?:la )?clase (.+?),?\s+(?:cambia|corrige|renombra) (?:el )?atributo (.+?)\s+(?:por|a)\s+([\p{L}_][\p{L}\p{N}_]*)$/iu);
+    const plan=correction ? {action:'correctPhotoAttribute',name:correction[1],oldName:correction[2],newName:correction[3]} : UMLCommands.parse(command);
+    const blocks=text.trim() ? text.trim().split(/\r?\n\s*\r?\n/).map(b=>b.split(/\r?\n/)) : [];
+    const key=value=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
+    const matches=blocks.filter(lines=>key(lines[0])===key(plan.name||''));
+    const additions=(plan.attributes||[]).map(a=>`${a.name}: ${a.type}`);
+    if(plan.action==='correctPhotoAttribute') {
+        if(matches.length!==1)throw new Error('No se encontró una única clase con ese nombre en la foto.');
+        const lines=matches[0], candidates=[];
+        for(let i=1;i<lines.length;i++){
+            if(lines[i].includes('('))continue;
+            const parts=lines[i].match(/^(\s*[+~#-]?\s*)([^:]+?)(\s*:\s*.*)?$/);
+            if(!parts)continue;
+            if(key(parts[2])===key(plan.oldName))candidates.push({index:i,parts});
+            else if(key(parts[2])===key(plan.newName))throw new Error('Ya existe un atributo con el nombre nuevo.');
+        }
+        if(candidates.length!==1)throw new Error('Indica el nombre de un único atributo del borrador.');
+        const {index,parts}=candidates[0];
+        lines[index]=parts[1]+plan.newName+(parts[3]||'');
+    } else if(plan.action==='createClass') {
+        if(matches.length)throw new Error('Esa clase ya está en la foto. Indica qué atributo agregar.');
+        blocks.push([plan.name,...additions]);
+    } else if(plan.action==='addAttributes') {
+        if(matches.length!==1)throw new Error('No se encontró una única clase con ese nombre en la foto.');
+        const lines=matches[0];
+        const existing=new Set(lines.slice(1).filter(line=>!line.includes('(')).map(line=>key(line.replace(/^[+~#-]\s*/,'').split(':')[0])));
+        for(const attribute of plan.attributes){
+            if(existing.has(key(attribute.name)))throw new Error(`El atributo ${attribute.name} ya existe; corrígelo en el texto.`);
+            existing.add(key(attribute.name));
+        }
+        const operation=lines.findIndex((line,index)=>index>0 && line.includes('('));
+        lines.splice(operation<0 ? lines.length : operation,0,...additions);
+    } else throw new Error('Para complementar la foto, indica la clase y los atributos que quieres agregar.');
+    return blocks.map(lines=>lines.join('\n')).join('\n\n');
+}
 function aiStatus(message) {document.getElementById('mobileAIStatus').textContent=message; const voiceStatus=document.getElementById('mobileVoiceStatus');if(voiceStatus)voiceStatus.textContent=message;}
 function runLocalVoice(payload) {
     if(localAI.pending) return Promise.reject(new Error('Espera a que termine el audio anterior'));
@@ -32,20 +68,13 @@ async function transcribeLocalFile(file,language='spanish') {
             localAI.photoTarget = false;
             const photoArea = document.getElementById('mobilePhotoText');
             if (photoArea) {
-                let textToAdd = '';
                 try {
-                    const plan = UMLCommands.parse(result.text);
-                    if (plan.action === 'createClass') {
-                        const lines = [plan.name, ...plan.attributes.map(a => `${a.name}: ${a.type}`)];
-                        textToAdd = lines.join('\n');
-                    } else if (plan.action === 'addAttributes') {
-                        textToAdd = plan.attributes.map(a => `${a.name}: ${a.type}`).join('\n');
-                    }
-                } catch(e) {
-                    textToAdd = result.text.trim();
-                }
-                if (textToAdd) {
-                    photoArea.value = (photoArea.value.trim() ? photoArea.value.trim() + '\n' : '') + textToAdd;
+                    photoArea.value = supplementPhotoDraft(photoArea.value, result.text);
+                } catch(error) {
+                    const status=document.getElementById('mobilePhotoStatus');
+                    if(status)status.textContent=`No se cambió el borrador: ${error.message} Texto reconocido: ${result.text}`;
+                    aiStatus('Revisa la transcripción; el borrador de la foto se conserva.');
+                    return;
                 }
                 const photoReview = document.getElementById('mobilePhotoReview');
                 if (photoReview) photoReview.hidden = false;
@@ -130,13 +159,17 @@ async function toggleLocalRecording(forPhoto = false) {
 async function prepareOffline() {
     const button=document.getElementById('prepareOffline');button.disabled=true;
     try {
+        localStorage.removeItem('uml_offline_prepared');
         if(!('serviceWorker' in navigator))throw new Error('Este navegador no admite instalación sin conexión');
         await navigator.serviceWorker.register('/sw.js');await navigator.serviceWorker.ready;
         const cache=await caches.open('uml-local-ai-v1');
-        const manifest=await (await fetch('/assets/offline-files.json')).json();
+        const manifestResponse=await fetch('/assets/offline-files.json',{cache:'no-store'});
+        if(!manifestResponse.ok)throw new Error('No se pudo obtener la lista de archivos sin conexión.');
+        const manifest=await manifestResponse.json();
+        if(!Array.isArray(manifest)||!manifest.length||manifest.some(path=>typeof path!=='string'||!path.startsWith('/')||path.startsWith('//')))throw new Error('La lista de archivos sin conexión es inválida.');
         for(let i=0;i<manifest.length;i++) {
             aiStatus(`Preparando archivos sin conexión ${i+1}/${manifest.length}`);
-            if(!await cache.match(manifest[i])) {const response=await fetch(manifest[i]);if(!response.ok)throw new Error(`Falta el archivo ${manifest[i]}`);await cache.put(manifest[i],response);}
+            if(!manifest[i].startsWith('/assets/') || !await cache.match(manifest[i])) {const response=await fetch(manifest[i],{cache:'no-cache'});if(!response.ok)throw new Error(`Falta el archivo ${manifest[i]}`);await cache.put(manifest[i],response);}
         }
         await runLocalVoice({type:'prepare'});
         await navigator.storage?.persist?.();
@@ -240,13 +273,45 @@ function detectPhotoMarkers(image, boxes) {
     }
     return markers;
 }
+function estimatePhotoSkew(image) {
+    const {width,height,data}=image, points=[];
+    const stride=Math.max(1,Math.ceil(Math.max(width,height)/600));
+    for(let y=0;y<height;y+=stride)for(let x=0;x<width;x+=stride){
+        const i=(y*width+x)*4;
+        if(data[i+3]>128 && data[i]+data[i+1]+data[i+2]<420)points.push([x/stride,y/stride]);
+    }
+    if(points.length<100)return 0;
+    const size=Math.ceil((width+height)/stride)*2+4;
+    const score=degrees=>{
+        const angle=degrees*Math.PI/180,s=Math.sin(angle),c=Math.cos(angle);
+        const rows=new Uint32Array(size);let value=0;
+        for(const [x,y] of points){const k=Math.round(y*c-x*s)+Math.floor(size/2);if(k>=0&&k<size)rows[k]++;}
+        for(const count of rows)value+=count*count;
+        return value;
+    };
+    const initial=score(0);let best=initial,angle=0;
+    for(let candidate=-12;candidate<=12;candidate+=0.5){const value=score(candidate);if(value>best){best=value;angle=candidate;}}
+    // Leave weak evidence unchanged rather than rotating arbitrary photographs.
+    return Math.abs(angle)>=0.5 && best>initial*1.2 ? angle : 0;
+}
+function straightenPhotoCanvas(canvas) {
+    const angle=estimatePhotoSkew(canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height));
+    if(!angle)return canvas;
+    const radians=-angle*Math.PI/180,c=Math.abs(Math.cos(radians)),s=Math.abs(Math.sin(radians));
+    const result=document.createElement('canvas');
+    result.width=Math.ceil(canvas.width*c+canvas.height*s);
+    result.height=Math.ceil(canvas.height*c+canvas.width*s);
+    const ctx=result.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,result.width,result.height);
+    ctx.translate(result.width/2,result.height/2);ctx.rotate(radians);ctx.drawImage(canvas,-canvas.width/2,-canvas.height/2);
+    return result;
+}
 async function photoCanvas(file) {
     const bitmap=await createImageBitmap(file);
     const canvas=document.createElement('canvas');
     const scale=Math.min(1,1800/Math.max(bitmap.width,bitmap.height));
     canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
     canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
-    return canvas;
+    return straightenPhotoCanvas(canvas);
 }
 async function recognizeLocalPhoto(file) {
     const statusEl = document.getElementById('mobilePhotoStatus');

@@ -83,8 +83,10 @@ function savePendingOffline() {
 function restorePendingOffline() {
     try {
         const saved = JSON.parse(localStorage.getItem(collaborationStorageKey()) || 'null');
-        if (saved?.pendingOffline) collaborationState.pendingOffline = saved.pendingOffline;
-    } catch (_) {}
+        collaborationState.pendingOffline = saved?.pendingOffline || null;
+    } catch (_) {
+        collaborationState.pendingOffline = null;
+    }
 }
 function flushOfflineQueue() {
     if (!collaborationState.pendingOffline || collaborationState.inflight || collaborationState.conflict) return;
@@ -239,23 +241,141 @@ async function initWebSocket() {
         collaborationState.reconnect=setTimeout(initWebSocket,3000);
     }
 }
+
+async function fetchRoomRevisions() {
+    if (!state.projectId || !collaborationState.token) {
+        throw new Error('No hay sesión de proyecto colaborativo activa');
+    }
+    const res = await umlApiFetch(`/api/collaboration/${state.projectId}/revisions`, {
+        headers: { 'Authorization': `Bearer ${collaborationState.token}` }
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Error al consultar revisiones' }));
+        throw new Error(err.detail || 'Error al consultar historial');
+    }
+    return await res.json();
+}
+
+async function revertRoomRevision(revision) {
+    if (!state.projectId || !collaborationState.token) {
+        throw new Error('No hay sesión de proyecto colaborativo activa');
+    }
+    if (collaborationState.role !== 'admin') {
+        throw new Error('Solo el administrador del proyecto puede revertir revisiones');
+    }
+    const res = await umlApiFetch(`/api/collaboration/${state.projectId}/revert/${revision}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${collaborationState.token}` }
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Error al revertir revisión' }));
+        throw new Error(err.detail || 'Error al revertir versión');
+    }
+    return await res.json();
+}
+
 async function showShareDialog() {
-    if (!collaborationState.token || state.ws?.readyState!==WebSocket.OPEN) { showToast('Conecta con el servidor para compartir','warning'); return; }
-    if (collaborationState.role!=='admin') { showToast('Pide un enlace al administrador del proyecto','info'); return; }
-    const dialog=document.createElement('dialog');
-    const heading=document.createElement('h2'); heading.textContent='Compartir diagrama';
-    const note=document.createElement('p'); note.textContent='Quien tenga este enlace podrá acceder con el permiso elegido. Un enlace localhost solo funciona en esta computadora; para otras personas hace falta el servidor accesible en su red.';
-    const select=document.createElement('select');
-    for (const [value,label] of [['editor','Puede editar'],['viewer','Solo lectura']]) { const option=document.createElement('option'); option.value=value; option.textContent=label; select.append(option); }
-    const output=document.createElement('input'); output.readOnly=true; output.style.width='100%'; output.setAttribute('aria-label','Enlace para compartir');
-    const make=document.createElement('button'); make.textContent='Crear enlace'; make.className='btn-primary';
-    make.onclick=async()=>{
-        const response=await umlApiFetch(`/api/collaboration/${state.projectId}/invite`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${collaborationState.token}`},body:JSON.stringify({role:select.value})});
-        if (!response.ok) { showToast('No se pudo crear el enlace','error'); return; }
-        const invite=await response.json(); const url=new URL('/',umlBackendOrigin()); url.searchParams.set('project',state.projectId); url.hash=`access=${invite.token}`; output.value=url.href; output.select();
+    if (!collaborationState.token || state.ws?.readyState !== WebSocket.OPEN) { showToast('Conecta con el servidor para compartir', 'warning'); return; }
+    if (collaborationState.role !== 'admin') { showToast('Pide un enlace al administrador del proyecto', 'info'); return; }
+    const dialog = document.createElement('dialog');
+    dialog.className = 'collaboration-share-modal';
+    dialog.innerHTML = `
+        <div style="padding:20px;max-width:440px;display:flex;flex-direction:column;gap:12px;color:#f8fafc;background:#1e1e2e;border-radius:12px;border:1px solid #3b3b54;font-family:sans-serif;">
+            <h3 style="margin:0;font-size:17px;font-weight:600;">Compartir y Control de Revisiones</h3>
+            <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.4;">Genera un enlace para invitar a otros colaboradores con permisos diferenciados (edición o solo lectura).</p>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <select id="inviteRoleSelect" style="padding:8px 12px;border-radius:6px;border:1px solid #4f46e5;background:#12121a;color:#fff;font-size:13px;flex:1;">
+                    <option value="editor">Puede editar (Editor)</option>
+                    <option value="viewer">Solo lectura (Visualizador)</option>
+                </select>
+                <button id="btnCreateInvite" class="btn-primary" style="padding:8px 14px;font-size:13px;background:#4f46e5;color:#fff;border:none;border-radius:6px;cursor:pointer;">Crear enlace</button>
+            </div>
+            <input id="inviteOutput" readonly placeholder="El enlace generado aparecerá aquí..." style="padding:8px;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#cbd5e1;font-size:12px;width:100%;box-sizing:border-box;">
+            
+            <hr style="border:none;border-top:1px solid #334155;margin:6px 0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:13px;font-weight:600;color:#e2e8f0;">Historial de Revisiones</span>
+                <span id="currentRevBadge" style="font-size:11px;background:#312e81;color:#a5b4fc;padding:2px 8px;border-radius:10px;">Rev. ${collaborationState.revision}</span>
+            </div>
+            <div id="revisionsContainer" style="max-height:120px;overflow-y:auto;background:#0f172a;border-radius:6px;border:1px solid #334155;padding:6px;display:flex;flex-direction:column;gap:4px;font-size:12px;">
+                <span style="color:#64748b;font-style:italic;padding:4px;">Cargando historial...</span>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;">
+                <button id="btnCloseShare" style="padding:6px 14px;border-radius:6px;border:1px solid #475569;background:transparent;color:#cbd5e1;cursor:pointer;">Cerrar</button>
+            </div>
+        </div>
+    `;
+    document.body.append(dialog);
+    dialog.showModal();
+
+    dialog.querySelector('#btnCreateInvite').onclick = async () => {
+        const role = dialog.querySelector('#inviteRoleSelect').value;
+        const response = await umlApiFetch(`/api/collaboration/${state.projectId}/invite`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${collaborationState.token}` },
+            body: JSON.stringify({ role })
+        });
+        if (!response.ok) { showToast('No se pudo crear el enlace', 'error'); return; }
+        const invite = await response.json();
+        const url = new URL('/', umlBackendOrigin());
+        url.searchParams.set('project', state.projectId);
+        url.hash = `access=${invite.token}`;
+        const out = dialog.querySelector('#inviteOutput');
+        out.value = url.href;
+        out.select();
+        showToast('Enlace creado y copiado al campo', 'success');
     };
-    const close=document.createElement('button'); close.textContent='Cerrar'; close.onclick=()=>{dialog.close();dialog.remove();};
-    dialog.append(heading,note,select,make,output,close); document.body.append(dialog); dialog.showModal();
+
+    // Load revisions list
+    try {
+        const revData = await fetchRoomRevisions();
+        const container = dialog.querySelector('#revisionsContainer');
+        container.innerHTML = '';
+        if (revData && revData.revisions && revData.revisions.length > 0) {
+            revData.revisions.slice().reverse().forEach(revNum => {
+                const row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.justifyContent = 'space-between';
+                row.style.alignItems = 'center';
+                row.style.padding = '4px 8px';
+                row.style.borderRadius = '4px';
+                row.style.background = revNum === revData.currentRevision ? '#1e1b4b' : '#1e293b';
+
+                const label = document.createElement('span');
+                label.textContent = `Revisión #${revNum}${revNum === revData.currentRevision ? ' (actual)' : ''}`;
+                label.style.color = revNum === revData.currentRevision ? '#818cf8' : '#cbd5e1';
+
+                row.append(label);
+                if (revNum !== revData.currentRevision) {
+                    const btnRev = document.createElement('button');
+                    btnRev.textContent = 'Restaurar';
+                    btnRev.style.cssText = 'padding:2px 8px;font-size:11px;background:#4338ca;color:#fff;border:none;border-radius:4px;cursor:pointer;';
+                    btnRev.onclick = async () => {
+                        if (confirm(`¿Deseas restaurar el diagrama a la Revisión #${revNum}?`)) {
+                            try {
+                                await revertRoomRevision(revNum);
+                                showToast(`Diagrama revertido a Revisión #${revNum}`, 'success');
+                                dialog.close();
+                                dialog.remove();
+                            } catch (err) {
+                                showToast(err.message, 'error');
+                            }
+                        }
+                    };
+                    row.append(btnRev);
+                }
+                container.append(row);
+            });
+        } else {
+            container.innerHTML = '<span style="color:#64748b;padding:4px;">No hay revisiones previas</span>';
+        }
+    } catch (e) {
+        const container = dialog.querySelector('#revisionsContainer');
+        if (container) container.innerHTML = `<span style="color:#ef4444;padding:4px;">Error: ${e.message}</span>`;
+    }
+
+    dialog.querySelector('#btnCloseShare').onclick = () => { dialog.close(); dialog.remove(); };
 }
 
 function showServerConnectionDialog() {

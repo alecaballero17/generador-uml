@@ -1091,13 +1091,26 @@ document.addEventListener('keydown', (e) => {
     // Don't intercept when typing in inputs
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
 
-    if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
-    if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
-    if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveProject(); }
-    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); $('#btnDelete').click(); }
-    if (e.key === 'Escape') { setActiveTool(null); state.selectedId = null; state.selectedType = null; renderAll(); }
-    if (e.key === 'c') { setActiveTool('class'); }
-    if (e.key === 'i') { setActiveTool('interface'); }
+    const isModifier = e.ctrlKey || e.metaKey;
+
+    if (isModifier && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+    if ((isModifier && e.key.toLowerCase() === 'y') || (isModifier && e.shiftKey && e.key.toLowerCase() === 'z')) { e.preventDefault(); redo(); return; }
+    if (isModifier && e.key.toLowerCase() === 's') { e.preventDefault(); saveProject(); return; }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); $('#btnDelete').click(); return; }
+    if (e.key === 'Escape') {
+        const openModal = document.querySelector('.modal:not(.hidden)');
+        if (openModal) {
+            openModal.classList.add('hidden');
+        } else {
+            setActiveTool(null);
+            state.selectedId = null;
+            state.selectedType = null;
+            renderAll();
+        }
+        return;
+    }
+    if (!isModifier && !e.altKey && e.key === 'c') { setActiveTool('class'); }
+    if (!isModifier && !e.altKey && e.key === 'i') { setActiveTool('interface'); }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1459,6 +1472,176 @@ $('#btnExportSVG').addEventListener('click', () => {
         showToast('Diagrama exportado como imagen SVG autónoma', 'success');
     } catch (err) {
         showToast(`Error exportando SVG: ${err.message}`, 'error');
+    }
+});
+
+async function exportDiagramPNG(scale = 2) {
+    if (!state.model.classes || state.model.classes.length === 0) {
+        showToast('Diagrama vacío: agrega al menos una clase para exportar', 'info');
+        return;
+    }
+    const svgStr = generateStandaloneSVG();
+    const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+
+    try {
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error('No se pudo renderizar el gráfico SVG para exportar'));
+            img.src = url;
+        });
+
+        const vbMatch = svgStr.match(/viewBox="([^"]+)"/);
+        let w = img.naturalWidth || img.width || 800;
+        let h = img.naturalHeight || img.height || 600;
+        if (vbMatch) {
+            const parts = vbMatch[1].trim().split(/\s+/).map(Number);
+            if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+                w = parts[2];
+                h = parts[3];
+            }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(w * scale);
+        canvas.height = Math.round(h * scale);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('No se pudo inicializar el contexto del lienzo');
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (!pngBlob) throw new Error('Error generando los datos binarios del archivo PNG');
+
+        const filename = `${state.model.name.replace(/ /g, '_')}.png`;
+        await saveExportBlob(filename, pngBlob);
+        $('#exportModal').classList.add('hidden');
+        showToast('Diagrama exportado como imagen PNG (2x HD)', 'success');
+    } catch (err) {
+        showToast(`Error exportando PNG: ${err.message}`, 'error');
+    } finally {
+        URL.revokeObjectURL(url);
+    }
+}
+
+$('#btnExportPNG')?.addEventListener('click', async () => {
+    await exportDiagramPNG(2);
+});
+
+function generatePlantUML(model) {
+    let puml = "@startuml\n!theme plain\n";
+    puml += `title ${model.name || 'Diagrama UML'}\n\n`;
+
+    for (const cls of model.classes) {
+        const type = cls.isInterface ? "interface" : (cls.isAbstract ? "abstract class" : "class");
+        puml += `${type} ${cls.name} {\n`;
+        for (const attr of cls.attributes) {
+            const vis = attr.visibility || "-";
+            puml += `  ${vis}${attr.name}: ${attr.type}\n`;
+        }
+        for (const op of (cls.operations || [])) {
+            const vis = op.visibility || "+";
+            const params = (op.parameters || []).map(p => `${p.name}: ${p.type}`).join(', ');
+            puml += `  ${vis}${op.name}(${params}): ${op.returnType || 'void'}\n`;
+        }
+        puml += `}\n\n`;
+    }
+
+    const relSymbols = {
+        'association': '-->',
+        'aggregation': 'o--',
+        'composition': '*--',
+        'generalization': '--|>',
+        'realization': '..|>',
+        'dependency': '..>'
+    };
+
+    for (const rel of model.relationships) {
+        const src = model.getClass(rel.source.classId);
+        const tgt = model.getClass(rel.target.classId);
+        if (src && tgt) {
+            const sym = relSymbols[rel.type] || '-->';
+            const hasMult = ['association', 'aggregation', 'composition'].includes(rel.type);
+            const srcMult = (hasMult && rel.source.multiplicity) ? ` "${rel.source.multiplicity}"` : "";
+            const tgtMult = (hasMult && rel.target.multiplicity) ? ` "${rel.target.multiplicity}"` : "";
+            puml += `${src.name}${srcMult} ${sym}${tgtMult} ${tgt.name}\n`;
+        }
+    }
+
+    puml += "@enduml\n";
+    return puml;
+}
+
+function generateMermaid(model) {
+    let mmd = "classDiagram\n";
+    mmd += `  %% ${model.name || 'Diagrama UML'}\n`;
+
+    for (const cls of model.classes) {
+        if (cls.isInterface) {
+            mmd += `  class ${cls.name} {\n    <<interface>>\n`;
+        } else if (cls.isAbstract) {
+            mmd += `  class ${cls.name} {\n    <<abstract>>\n`;
+        } else {
+            mmd += `  class ${cls.name} {\n`;
+        }
+        for (const attr of cls.attributes) {
+            const vis = attr.visibility || "-";
+            mmd += `    ${vis}${attr.type} ${attr.name}\n`;
+        }
+        for (const op of (cls.operations || [])) {
+            const vis = op.visibility || "+";
+            const params = (op.parameters || []).map(p => `${p.type} ${p.name}`).join(', ');
+            mmd += `    ${vis}${op.name}(${params}) ${op.returnType || 'void'}\n`;
+        }
+        mmd += `  }\n`;
+    }
+
+    const relSymbols = {
+        'association': '-->',
+        'aggregation': '--o',
+        'composition': '--*',
+        'generalization': '<|--',
+        'realization': '<|..',
+        'dependency': '..>'
+    };
+
+    for (const rel of model.relationships) {
+        const src = model.getClass(rel.source.classId);
+        const tgt = model.getClass(rel.target.classId);
+        if (src && tgt) {
+            const sym = relSymbols[rel.type] || '-->';
+            const hasMult = ['association', 'aggregation', 'composition'].includes(rel.type);
+            const srcMult = (hasMult && rel.source.multiplicity) ? ` "${rel.source.multiplicity}"` : "";
+            const tgtMult = (hasMult && rel.target.multiplicity) ? ` "${rel.target.multiplicity}"` : "";
+            mmd += `  ${src.name}${srcMult} ${sym}${tgtMult} ${tgt.name}\n`;
+        }
+    }
+
+    return mmd;
+}
+
+$('#btnExportPlantUML')?.addEventListener('click', () => {
+    try {
+        const puml = generatePlantUML(state.model);
+        downloadFile(`${state.model.name.replace(/ /g, '_')}.puml`, puml, 'text/plain');
+        $('#exportModal').classList.add('hidden');
+        showToast('Exportado a PlantUML (.puml)', 'success');
+    } catch (err) {
+        showToast(`Error exportando PlantUML: ${err.message}`, 'error');
+    }
+});
+
+$('#btnExportMermaid')?.addEventListener('click', () => {
+    try {
+        const mmd = generateMermaid(state.model);
+        downloadFile(`${state.model.name.replace(/ /g, '_')}.mmd`, mmd, 'text/plain');
+        $('#exportModal').classList.add('hidden');
+        showToast('Exportado a Mermaid (.mmd)', 'success');
+    } catch (err) {
+        showToast(`Error exportando Mermaid: ${err.message}`, 'error');
     }
 });
 

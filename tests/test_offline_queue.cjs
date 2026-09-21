@@ -155,4 +155,16 @@ function buildContext(modelData) {
     console.log('✓ Test 8: WS onclose moves inflight to pendingOffline');
 }
 
+// Test 9: Project switching isolation (restorePendingOffline resets pendingOffline if project has no offline queue)
+{
+    const {ctx,stored}=buildContext();
+    // Simulate leftover pendingOffline from a prior project in memory
+    vm.runInContext("collaborationState.pendingOffline = { name: 'OldProjectDraft' };", ctx);
+    // Switch project to q2 which has no offline queue
+    ctx.collaborationStorageKey = () => 'collaboration_q2_cid';
+    vm.runInContext('restorePendingOffline()', ctx);
+    assert.equal(vm.runInContext('collaborationState.pendingOffline', ctx), null, 'pendingOffline should be reset to null when loading a project without offline queue');
+    console.log('✓ Test 9: Project switching queue isolation verified');
+}
+
 console.log('\nAll offline queue tests passed ✓');

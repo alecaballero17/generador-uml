@@ -57,6 +57,8 @@ class DetectedLine:
     rel_type: RelationshipType = RelationshipType.ASSOCIATION
     confidence: float = 0.75
     raw_annotation: str = ""
+    source_multiplicity: Optional[str] = None
+    target_multiplicity: Optional[str] = None
 
 
 class PhotoInterpreter:
@@ -67,6 +69,69 @@ class PhotoInterpreter:
             pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
         self.review_notes: List[str] = []
         self.warnings: List[str] = []
+
+    def _normalize_illumination(self, gray: np.ndarray) -> np.ndarray:
+        """Normaliza la iluminación en fotos de pizarras o papel, reduciendo sombras y gradientes."""
+        if not CV2_AVAILABLE:
+            return gray
+        try:
+            # Filtro bilateral para preservar bordes mientras reduce ruido de grano
+            filtered = cv2.bilateralFilter(gray, 7, 50, 50)
+            # CLAHE para ecualizar contraste local frente a sombras y gradientes de luz
+            clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+            return clahe.apply(filtered)
+        except Exception:
+            return gray
+
+    def _estimate_deskew_angle(self, gray: np.ndarray) -> float:
+        """Estima el ángulo de inclinación predominante (skew) de las líneas de cajas en la foto."""
+        if not CV2_AVAILABLE:
+            return 0.0
+        try:
+            edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+            lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=40, minLineLength=40, maxLineGap=20)
+            if lines is None or len(lines) == 0:
+                return 0.0
+
+            angles = []
+            for x1, y1, x2, y2 in lines.reshape(-1, 4):
+                dx = x2 - x1
+                dy = y2 - y1
+                angle = math.degrees(math.atan2(dy, dx))
+                # Normalizar alrededor del eje horizontal (-45 a 45)
+                if angle < -45:
+                    angle += 90
+                elif angle > 45:
+                    angle -= 90
+                # Considerar solo inclinaciones sutiles típicas de fotos tomadas a mano (-15 a 15 grados)
+                if 0.8 <= abs(angle) <= 15.0:
+                    angles.append(angle)
+
+            if not angles or len(angles) < 2:
+                return 0.0
+
+            median_angle = float(np.median(angles))
+            return median_angle
+        except Exception:
+            return 0.0
+
+    def _deskew_image(self, img: np.ndarray, angle: float) -> np.ndarray:
+        """Rota la imagen según el ángulo estimado para rectificar las cajas y compartimentos."""
+        if not CV2_AVAILABLE or abs(angle) < 0.5:
+            return img
+        try:
+            h, w = img.shape[:2]
+            center = (w // 2, h // 2)
+            M = cv2.getRotationMatrix2D(center, angle, 1.0)
+            deskewed = cv2.warpAffine(
+                img, M, (w, h),
+                flags=cv2.INTER_CUBIC,
+                borderMode=cv2.BORDER_REPLICATE
+            )
+            self.review_notes.append(f"Se corrigió la inclinación de la fotografía ({angle:.1f}°).")
+            return deskewed
+        except Exception:
+            return img
 
     def interpret_image_bytes(self, image_bytes: bytes) -> Dict[str, Any]:
         """Procesa una imagen en bytes y retorna el diagrama UML y reporte de detección."""
@@ -108,19 +173,25 @@ class PhotoInterpreter:
         else:
             gray = img_bgr_or_rgb.copy()
 
-        # 1. Preprocesamiento: binarización adaptativa y filtrado
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        # 1. Preprocesamiento: normalización de iluminación contra sombras/gradientes
+        normalized_gray = self._normalize_illumination(gray)
+        skew_angle = self._estimate_deskew_angle(normalized_gray)
+        if abs(skew_angle) >= 0.8:
+            normalized_gray = self._deskew_image(normalized_gray, skew_angle)
+            if len(img_bgr_or_rgb.shape) == 3:
+                img_bgr_or_rgb = self._deskew_image(img_bgr_or_rgb, skew_angle)
+        blurred = cv2.GaussianBlur(normalized_gray, (5, 5), 0)
         binary = cv2.adaptiveThreshold(
             blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY_INV, 15, 4
         )
 
         # 2. Detección de cajas de clases (rectángulos grandes)
-        detected_boxes = self._detect_class_boxes(binary, gray, w, h)
+        detected_boxes = self._detect_class_boxes(binary, normalized_gray, w, h)
 
         # Si no se detectaron rectángulos suficientes con adaptive, probar con Canny + Contornos
         if len(detected_boxes) < 2:
-            detected_boxes = self._detect_boxes_morphology(gray, w, h)
+            detected_boxes = self._detect_boxes_morphology(normalized_gray, w, h)
 
         # 3. Extraer texto y compartimentos de cada caja
         diagram = UMLDiagram(name="Diagrama Interpretado de Fotografía")
@@ -141,10 +212,13 @@ class PhotoInterpreter:
         lines = self._detect_relationships(binary, [b for b in detected_boxes if b.parsed_class])
         for line in lines:
             if line.source_box_id and line.target_box_id:
+                has_mult = line.rel_type in (RelationshipType.ASSOCIATION, RelationshipType.AGGREGATION, RelationshipType.COMPOSITION)
+                src_mult = line.source_multiplicity if (has_mult and line.source_multiplicity) else "1"
+                dst_mult = line.target_multiplicity if (has_mult and line.target_multiplicity) else "1"
                 rel = UMLRelationship(
                     type=line.rel_type,
-                    source=RelationshipEnd(class_id=line.source_box_id),
-                    target=RelationshipEnd(class_id=line.target_box_id),
+                    source=RelationshipEnd(class_id=line.source_box_id, multiplicity=src_mult),
+                    target=RelationshipEnd(class_id=line.target_box_id, multiplicity=dst_mult),
                 )
                 diagram.relationships.append(rel)
 
@@ -250,14 +324,21 @@ class PhotoInterpreter:
 
         class_name = f"Clase_{box.x // 100}_{box.y // 100}"
         is_interface = False
+        is_abstract = False
         attributes: List[UMLAttribute] = []
         operations: List[UMLOperation] = []
 
         if lines:
             first_line = lines[0]
-            if "interface" in first_line.lower():
+            first_lower = first_line.lower()
+            if "interface" in first_lower:
                 is_interface = True
                 cleaned = re.sub(r'<<[^>]+>>', '', first_line).replace("interface", "").strip()
+                if cleaned:
+                    class_name = self._sanitize_identifier(cleaned)
+            elif "abstract" in first_lower:
+                is_abstract = True
+                cleaned = re.sub(r'<<[^>]+>>', '', first_line).replace("abstract", "").strip()
                 if cleaned:
                     class_name = self._sanitize_identifier(cleaned)
             else:
@@ -285,6 +366,7 @@ class PhotoInterpreter:
             id=box.id,
             name=class_name,
             is_interface=is_interface,
+            is_abstract=is_abstract,
             attributes=attributes,
             operations=operations,
             position=Position(x=float(box.x), y=float(box.y)),
@@ -294,12 +376,12 @@ class PhotoInterpreter:
         return uml_cls
 
     def _parse_attribute_line(self, line: str) -> Optional[UMLAttribute]:
-        """Parsea una línea de texto de atributo UML: [+-#~] nombre: Tipo [= valor]"""
+        """Parsea una línea de texto de atributo UML: [+-#~] [/] nombre: Tipo [multiplicidad] [= valor] [{restricciones}]"""
         vis = Visibility.PRIVATE
         if line.startswith("+"):
             vis = Visibility.PUBLIC
             line = line[1:].strip()
-        elif line.startswith("-"):
+        elif line.startswith(("-", "–", "—", "•", "*")):
             vis = Visibility.PRIVATE
             line = line[1:].strip()
         elif line.startswith("#"):
@@ -309,35 +391,79 @@ class PhotoInterpreter:
             vis = Visibility.PACKAGE
             line = line[1:].strip()
 
+        is_derived = False
+        if line.startswith("/"):
+            is_derived = True
+            line = line[1:].strip()
+
+        # Extraer restricciones {id}, {unique}, etc.
+        constraints: List[str] = []
+        c_match = re.search(r'\{([^}]+)\}', line)
+        if c_match:
+            constraints.extend(c.strip().lower() for c in c_match.group(1).split(",") if c.strip())
+            line = re.sub(r'\{[^}]+\}', '', line).strip()
+
+        s_match = re.search(r'<<([^>]+)>>', line)
+        if s_match:
+            raw_s = s_match.group(1).lower()
+            if "pk" in raw_s or "id" in raw_s:
+                constraints.append("id")
+            if "unique" in raw_s:
+                constraints.append("unique")
+            line = re.sub(r'<<[^>]+>>', '', line).strip()
+
+        # Separar default value si existe
+        default_val = None
+        if "=" in line:
+            parts = line.split("=", 1)
+            default_val = parts[1].strip()
+            line = parts[0].strip()
+
         # Separar por dos puntos
         if ":" in line:
             parts = line.split(":", 1)
             name = self._sanitize_identifier(parts[0].strip())
-            type_str = parts[1].strip().split("=")[0].strip()
-            type_str = self._sanitize_identifier(type_str) or "String"
+            type_str = parts[1].strip()
         else:
             tokens = line.split()
             if len(tokens) >= 2:
                 name = self._sanitize_identifier(tokens[0])
-                type_str = self._sanitize_identifier(tokens[1])
+                type_str = tokens[1].strip()
             elif tokens:
                 name = self._sanitize_identifier(tokens[0])
                 type_str = "String"
             else:
                 return None
 
+        # Extraer multiplicidad del tipo, ej. String[0..*] o List<int>
+        multiplicity = None
+        m_match = re.search(r'\[(.*?)\]', type_str)
+        if m_match:
+            multiplicity = m_match.group(1).strip() or "*"
+            type_str = re.sub(r'\[.*?\]', '', type_str).strip()
+
+        type_str = self._sanitize_identifier(type_str) or "String"
+
         if not name:
             return None
 
-        return UMLAttribute(name=name, type=type_str, visibility=vis)
+        return UMLAttribute(
+            name=name,
+            type=type_str,
+            visibility=vis,
+            multiplicity=multiplicity,
+            default_value=default_val,
+            is_derived=is_derived,
+            constraints=constraints,
+        )
 
     def _parse_operation_line(self, line: str) -> Optional[UMLOperation]:
-        """Parsea una línea de texto de método UML: [+-#~] metodo(p1: T1): TipoRetorno"""
+        """Parsea una línea de texto de método UML: [+-#~] metodo(p1: T1 = def): TipoRetorno [{abstract/static}]"""
         vis = Visibility.PUBLIC
         if line.startswith("+"):
             vis = Visibility.PUBLIC
             line = line[1:].strip()
-        elif line.startswith("-"):
+        elif line.startswith(("-", "–", "—", "•", "*")):
             vis = Visibility.PRIVATE
             line = line[1:].strip()
         elif line.startswith("#"):
@@ -346,6 +472,15 @@ class PhotoInterpreter:
         elif line.startswith("~"):
             vis = Visibility.PACKAGE
             line = line[1:].strip()
+
+        is_abstract = False
+        is_static = False
+        if "{abstract}" in line.lower() or "<<abstract>>" in line.lower():
+            is_abstract = True
+            line = re.sub(r'\{abstract\}|<<abstract>>', '', line, flags=re.IGNORECASE).strip()
+        if "{static}" in line.lower() or "<<static>>" in line.lower():
+            is_static = True
+            line = re.sub(r'\{static\}|<<static>>', '', line, flags=re.IGNORECASE).strip()
 
         match = re.match(r'([A-Za-z0-9_]+)\s*\((.*?)\)(?:\s*:\s*([A-Za-z0-9_]+))?', line)
         if not match:
@@ -358,17 +493,33 @@ class PhotoInterpreter:
         params: List[UMLParameter] = []
         if params_str.strip():
             for p_chunk in params_str.split(","):
+                p_chunk = p_chunk.strip()
+                def_val = None
+                if "=" in p_chunk:
+                    p_parts = p_chunk.split("=", 1)
+                    def_val = p_parts[1].strip()
+                    p_chunk = p_parts[0].strip()
                 if ":" in p_chunk:
                     p_name, p_type = p_chunk.split(":", 1)
-                    params.append(UMLParameter(name=p_name.strip(), type=p_type.strip()))
+                    params.append(UMLParameter(
+                        name=self._sanitize_identifier(p_name.strip()),
+                        type=self._sanitize_identifier(p_type.strip()) or "String",
+                        default_value=def_val
+                    ))
                 else:
-                    params.append(UMLParameter(name=p_chunk.strip(), type="String"))
+                    params.append(UMLParameter(
+                        name=self._sanitize_identifier(p_chunk),
+                        type="String",
+                        default_value=def_val
+                    ))
 
         return UMLOperation(
             name=op_name,
             visibility=vis,
             parameters=params,
             return_type=return_type,
+            is_abstract=is_abstract,
+            is_static=is_static,
         )
 
     def _detect_relationships(self, binary: np.ndarray, boxes: List[DetectedBox]) -> List[DetectedLine]:
@@ -456,6 +607,9 @@ class PhotoInterpreter:
 
             if rel_type_dst in (RelationshipType.COMPOSITION, RelationshipType.AGGREGATION):
                 rel_type = rel_type_dst
+                # En composición y agregación, el rombo está en el todo/contenedor (source)
+                src_id, dst_id = dst_id, src_id
+                src_pt, dst_pt = dst_pt, src_pt
             elif rel_type_src in (RelationshipType.COMPOSITION, RelationshipType.AGGREGATION):
                 rel_type = rel_type_src
             elif rel_type_dst == RelationshipType.GENERALIZATION:
@@ -481,7 +635,7 @@ class PhotoInterpreter:
             else:
                 rel_type = RelationshipType.ASSOCIATION
 
-            # Detectar multiplicidades cerca de los endpoints
+            # Detectar multiplicidades cerca de los endpoints (después de la orientación definitiva)
             src_mult = self._detect_multiplicity_near(binary, src_pt)
             dst_mult = self._detect_multiplicity_near(binary, dst_pt)
 
@@ -492,6 +646,8 @@ class PhotoInterpreter:
                 target_box_id=dst_id,
                 rel_type=rel_type,
                 confidence=0.80 if rel_type != RelationshipType.ASSOCIATION else 0.75,
+                source_multiplicity=src_mult,
+                target_multiplicity=dst_mult,
             )
 
             # Build detailed annotation with multiplicities
@@ -522,11 +678,134 @@ class PhotoInterpreter:
 
             lines.append(detected)
 
+        # Detectar conexiones ramificadas (ej: herencia con bifurcación en T)
+        branched_lines = self._detect_branched_connections(hough_lines, boxes, binary)
+        existing_pairs = {(line.source_box_id, line.target_box_id) for line in lines} | {(line.target_box_id, line.source_box_id) for line in lines}
+        for br in branched_lines:
+            if (br.source_box_id, br.target_box_id) not in existing_pairs and (br.target_box_id, br.source_box_id) not in existing_pairs:
+                lines.append(br)
+                existing_pairs.add((br.source_box_id, br.target_box_id))
+
         # Si HoughLines no encontró conexiones, usar proximidad
         if not lines:
             lines = self._infer_closest_connections(boxes)
 
         return lines
+
+    def _detect_branched_connections(
+        self,
+        hough_lines: np.ndarray,
+        boxes: List[DetectedBox],
+        binary: np.ndarray
+    ) -> List[DetectedLine]:
+        """Detecta conexiones ramificadas (ej: herencia en T donde varias subclases
+        se conectan a través de una barra horizontal o unión con un triángulo apuntando al padre)."""
+        if len(boxes) < 2 or hough_lines is None:
+            return []
+
+        segments = []
+        for line_seg in hough_lines:
+            coords = line_seg.flatten()
+            if len(coords) >= 4:
+                x1, y1, x2, y2 = int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3])
+                if math.hypot(x2 - x1, y2 - y1) >= 12:
+                    segments.append((x1, y1, x2, y2))
+
+        if not segments:
+            return []
+
+        def pts_near(p1, p2, dist=25.0):
+            return math.hypot(p1[0] - p2[0], p1[1] - p2[1]) <= dist
+
+        def seg_near_point(s, pt, threshold=20.0):
+            return self._segment_near_point((s[0], s[1]), (s[2], s[3]), pt, threshold=threshold)
+
+        # Construir grafo de adyacencia entre segmentos conectados
+        n = len(segments)
+        adj: Dict[int, List[int]] = {i: [] for i in range(n)}
+        for i in range(n):
+            s1 = segments[i]
+            p1a, p1b = (s1[0], s1[1]), (s1[2], s1[3])
+            for j in range(i + 1, n):
+                s2 = segments[j]
+                p2a, p2b = (s2[0], s2[1]), (s2[2], s2[3])
+                if (pts_near(p1a, p2a) or pts_near(p1a, p2b) or
+                    pts_near(p1b, p2a) or pts_near(p1b, p2b) or
+                    seg_near_point(s1, p2a) or seg_near_point(s1, p2b) or
+                    seg_near_point(s2, p1a) or seg_near_point(s2, p1b)):
+                    adj[i].append(j)
+                    adj[j].append(i)
+
+        # Encontrar componentes conexas de segmentos
+        visited = set()
+        components = []
+        for i in range(n):
+            if i not in visited:
+                comp = []
+                queue = [i]
+                visited.add(i)
+                while queue:
+                    curr = queue.pop(0)
+                    comp.append(curr)
+                    for neighbor in adj[curr]:
+                        if neighbor not in visited:
+                            visited.add(neighbor)
+                            queue.append(neighbor)
+                components.append(comp)
+
+        results = []
+        for comp in components:
+            if len(comp) < 2:
+                continue
+
+            # Cajas que tocan este componente conexo
+            box_touches: Dict[str, Tuple[Tuple[int, int], Tuple[int, int]]] = {}
+            for seg_idx in comp:
+                s = segments[seg_idx]
+                p1, p2 = (s[0], s[1]), (s[2], s[3])
+                b1 = self._find_closest_box(p1, boxes, max_dist=70.0)
+                if b1 and b1.id not in box_touches:
+                    box_touches[b1.id] = (p1, p2)
+                b2 = self._find_closest_box(p2, boxes, max_dist=70.0)
+                if b2 and b2.id not in box_touches:
+                    box_touches[b2.id] = (p2, p1)
+
+            if len(box_touches) >= 2:
+                # Comprobar si alguna caja tiene un marcador de triángulo apuntando a ella
+                parent_box_id = None
+                is_dashed = False
+                for b_id, (pt_box, other_pt) in box_touches.items():
+                    rel_type, marker = self._classify_endpoint_detailed(binary, pt_box, other_pt)
+                    if rel_type == RelationshipType.GENERALIZATION or marker in ('triangle', 'hollow_triangle'):
+                        parent_box_id = b_id
+                        if marker == 'hollow_triangle' and self._is_dashed_line(binary, other_pt, pt_box):
+                            is_dashed = True
+                        break
+
+                if parent_box_id:
+                    parent_box = next((b for b in boxes if b.id == parent_box_id), None)
+                    parent_name = parent_box.parsed_class.name if parent_box and parent_box.parsed_class else parent_box_id
+                    rel_type = RelationshipType.REALIZATION if is_dashed else RelationshipType.GENERALIZATION
+
+                    for child_id, (c_pt, c_other) in box_touches.items():
+                        if child_id != parent_box_id:
+                            child_box = next((b for b in boxes if b.id == child_id), None)
+                            child_name = child_box.parsed_class.name if child_box and child_box.parsed_class else child_id
+
+                            results.append(DetectedLine(
+                                start_pt=c_pt,
+                                end_pt=box_touches[parent_box_id][0],
+                                source_box_id=child_id,
+                                target_box_id=parent_box_id,
+                                rel_type=rel_type,
+                                confidence=0.82,
+                                raw_annotation="branched_inheritance" if not is_dashed else "branched_realization"
+                            ))
+                            self.review_notes.append(
+                                f"Herencia ramificada detectada: {child_name} hereda de {parent_name} a través de bifurcación en T."
+                            )
+
+        return results
 
     def _point_to_box_dist(self, pt: Tuple[int, int], box: DetectedBox) -> float:
         """Distancia de un punto al borde del rectángulo de la caja."""

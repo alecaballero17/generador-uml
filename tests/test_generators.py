@@ -194,6 +194,37 @@ class TestFlutterGenerator:
         assert "speech_to_text" in assistant
         assert "_simulateVoiceInput" not in assistant
 
+    def test_detail_screen_includes_operations_and_context_icons(self):
+        cliente = self.diagram.get_class("cls-cliente")
+        cliente.operations.append(
+            UMLOperation(name="calcularSaldo", return_type="Double", parameters=[])
+        )
+        files = self.gen.generate_all()
+        detail = files.get("lib/screens/cliente/cliente_detail_screen.dart", "")
+        assert "Operaciones y Métodos UML" in detail
+        assert "calcularSaldo" in detail
+        assert "Ejecutar" in detail
+        assert "Icons.person_outline" in detail
+
+    def test_model_nested_deserialization(self):
+        files = self.gen.generate_all()
+        mascota_model = files.get("lib/models/mascota.dart", "")
+        # Should handle Map or direct ID without crashing
+        assert "json['clienteId'] is Map" in mascota_model
+
+    def test_operation_buttons_do_not_assign_void_results(self):
+        cliente = self.diagram.get_class("cls-cliente")
+        cliente.operations.extend([
+            UMLOperation(name="notificar", return_type="void", parameters=[]),
+            UMLOperation(name="saldo", return_type="Double", parameters=[]),
+        ])
+        detail = self.gen.generate_all()["lib/screens/cliente/cliente_detail_screen.dart"]
+        assert "item.notificar();" in detail
+        assert "final res = item.notificar()" not in detail
+        assert "final res = item.saldo();" in detail
+        assert "notificar() ejecutada correctamente." in detail
+        assert "saldo() ejecutada: $res" in detail
+
 
 # ─── Validation Tests ─────────────────────────────────────────────────────
 

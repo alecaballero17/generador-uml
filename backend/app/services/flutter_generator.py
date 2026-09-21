@@ -93,8 +93,12 @@ class FlutterGenerator:
         return re.sub(r'_+', '_', clean).strip('_') or "flutter_app"
 
     def _to_camel_case(self, name: str) -> str:
-        parts = name.split('_')
-        return parts[0].lower() + ''.join(p.capitalize() for p in parts[1:])
+        if not name:
+            return ""
+        if "_" in name:
+            parts = name.split('_')
+            return parts[0].lower() + ''.join(p.capitalize() for p in parts[1:])
+        return name[0].lower() + name[1:]
 
     def _to_pascal_case(self, name: str) -> str:
         return ''.join(p.capitalize() for p in re.split(r'[^a-zA-Z0-9]', name) if p)
@@ -185,6 +189,14 @@ class FlutterGenerator:
             files[f"lib/screens/{snake}/{snake}_list_screen.dart"] = self._generate_list_screen(cls)
             files[f"lib/screens/{snake}/{snake}_detail_screen.dart"] = self._generate_detail_screen(cls)
             files[f"lib/screens/{snake}/{snake}_form_screen.dart"] = self._generate_form_screen(cls)
+
+        # 4b. Modelos para interfaces y clases abstractas
+        non_entities = [c for c in self.diagram.classes if c.is_interface or c.is_abstract]
+        for c in non_entities:
+            snake = self._to_snake_case(c.name)
+            model_path = f"lib/models/{snake}.dart"
+            if model_path not in files:
+                files[model_path] = self._generate_abstract_or_interface_model(c)
 
         # 5. Tests básicos
         files["test/widget_test.dart"] = self._generate_widget_test()
@@ -1125,14 +1137,16 @@ class _ChatMessage {{
 
             # fromJson
             if dtype == "List<int>":
-                from_json_fields.append(f"      {attr.name}: (json['{attr.name}'] as List?)?.map((x) => (x as num).toInt()).toList(),")
+                from_json_fields.append(
+                    f"      {attr.name}: (json['{attr.name}'] as List?)?.map((x) => x is Map ? (x['id'] as num?)?.toInt() ?? 0 : (x is num ? x.toInt() : int.tryParse(x.toString()) ?? 0)).where((x) => x != 0).toList(),"
+                )
             elif dtype == "DateTime":
                 from_json_fields.append(
                     f"      {attr.name}: json['{attr.name}'] != null ? DateTime.tryParse(json['{attr.name}'].toString()) : null,"
                 )
             elif dtype == "int":
                 from_json_fields.append(
-                    f"      {attr.name}: json['{attr.name}'] != null ? int.tryParse(json['{attr.name}'].toString()) : null,"
+                    f"      {attr.name}: json['{attr.name}'] is Map ? int.tryParse(json['{attr.name}']['id']?.toString() ?? '') : (json['{attr.name}'] != null ? int.tryParse(json['{attr.name}'].toString()) : null),"
                 )
             elif dtype == "double":
                 from_json_fields.append(
@@ -1189,7 +1203,102 @@ class {cls.name} {{
     return {cls.name}(
 {copy_with_a_str}
     );
-  }}
+  }}{self._generate_dart_operations(cls)}
+}}
+"""
+
+    def _generate_dart_operations(self, cls: UMLClass) -> str:
+        methods = []
+        own_op_names = set()
+
+        for op in getattr(cls, 'operations', []):
+            own_op_names.add(op.name)
+            return_type = self._dart_type(op.return_type) if op.return_type and op.return_type != "void" else "void"
+            param_parts = []
+            for p in getattr(op, 'parameters', []):
+                p_type = self._dart_type(p.type)
+                param_parts.append(f"{p_type} {self._to_camel_case(p.name)}")
+            params_str = ", ".join(param_parts)
+            static_kw = "static " if getattr(op, "is_static", False) else ""
+            method_name = self._to_camel_case(op.name)
+
+            if return_type == "void":
+                body = "    // Regla de negocio UML\n    // TODO: Implementar lógica personalizada\n"
+            elif return_type == "int":
+                body = "    return 0;\n"
+            elif return_type == "double":
+                body = "    return 0.0;\n"
+            elif return_type == "bool":
+                body = "    return false;\n"
+            elif return_type == "String":
+                body = "    return '';\n"
+            elif return_type == "DateTime":
+                body = "    return DateTime.now();\n"
+            else:
+                body = f"    throw UnimplementedError('Operación UML {op.name} no implementada');\n"
+
+            methods.append(f"""  /// Operación UML: {op.name}
+  {static_kw}{return_type} {method_name}({params_str}) {{
+{body}  }}""")
+
+        # Realized interface operations that aren't yet defined
+        for rel in self.diagram.relationships:
+            if rel.type == RelationshipType.REALIZATION and rel.source.class_id == cls.id:
+                iface = self.diagram.get_class(rel.target.class_id)
+                if iface:
+                    for op in getattr(iface, 'operations', []):
+                        if op.name not in own_op_names:
+                            own_op_names.add(op.name)
+                            return_type = self._dart_type(op.return_type) if op.return_type and op.return_type != "void" else "void"
+                            param_parts = [f"{self._dart_type(p.type)} {self._to_camel_case(p.name)}" for p in getattr(op, 'parameters', [])]
+                            params_str = ", ".join(param_parts)
+                            method_name = self._to_camel_case(op.name)
+                            if return_type == "void":
+                                body = "    // Implementación de interfaz UML\n"
+                            elif return_type == "int":
+                                body = "    return 0;\n"
+                            elif return_type == "double":
+                                body = "    return 0.0;\n"
+                            elif return_type == "bool":
+                                body = "    return false;\n"
+                            elif return_type == "String":
+                                body = "    return '';\n"
+                            else:
+                                body = f"    throw UnimplementedError('Operación {op.name} no implementada');\n"
+
+                            methods.append(f"""  /// Implementación de interfaz: {iface.name}.{op.name}
+  @override
+  {return_type} {method_name}({params_str}) {{
+{body}  }}""")
+
+        if not methods:
+            return ""
+        return "\n\n  // ── Operaciones UML ──\n" + "\n\n".join(methods)
+
+    def _generate_abstract_or_interface_model(self, cls: UMLClass) -> str:
+        decl_kind = "interface class" if getattr(cls, 'is_interface', False) else "abstract class"
+        fields = []
+        for attr in getattr(cls, 'attributes', []):
+            dtype = self._dart_type(attr.type)
+            fields.append(f"  abstract {dtype}? {attr.name};")
+
+        methods = []
+        for op in getattr(cls, 'operations', []):
+            return_type = self._dart_type(op.return_type) if op.return_type and op.return_type != "void" else "void"
+            param_parts = [f"{self._dart_type(p.type)} {self._to_camel_case(p.name)}" for p in getattr(op, 'parameters', [])]
+            params_str = ", ".join(param_parts)
+            methods.append(f"  {return_type} {self._to_camel_case(op.name)}({params_str});")
+
+        body_parts = []
+        if fields:
+            body_parts.append("  // Atributos\n" + "\n".join(fields))
+        if methods:
+            body_parts.append("  // Operaciones\n" + "\n".join(methods))
+        body = "\n\n".join(body_parts) if body_parts else "  // Sin miembros definidos"
+
+        return f"""/// {cls.name} ({'Interfaz' if cls.is_interface else 'Clase abstracta'} UML)
+{decl_kind} {cls.name} {{
+{body}
 }}
 """
 
@@ -1631,13 +1740,155 @@ class _{cls.name}ListScreenState extends State<{cls.name}ListScreen> {{
 
         fields_widgets = []
         for attr in cls.attributes:
+            lname = attr.name.lower()
+            ltype = str(attr.type).lower()
+            if lname in ('id', 'uuid', 'codigo', 'cod', 'identificador'):
+                icon_code = "Icons.tag"
+            elif any(k in lname for k in ('fecha', 'date', 'hora', 'time', 'timestamp')) or ltype in ('date', 'localdate', 'datetime', 'localdatetime', 'timestamp'):
+                icon_code = "Icons.calendar_today"
+            elif any(k in lname for k in ('precio', 'costo', 'total', 'monto', 'saldo', 'importe', 'salario', 'pago', 'subtotal')) or ltype in ('double', 'float', 'bigdecimal', 'decimal'):
+                icon_code = "Icons.attach_money"
+            elif any(k in lname for k in ('correo', 'email', 'mail')):
+                icon_code = "Icons.email_outlined"
+            elif any(k in lname for k in ('telefono', 'tel', 'phone', 'celular', 'movil')):
+                icon_code = "Icons.phone_outlined"
+            elif any(k in lname for k in ('activo', 'habilitado', 'enabled', 'active')) or ltype in ('bool', 'boolean'):
+                icon_code = "Icons.toggle_on_outlined"
+            elif any(k in lname for k in ('descripcion', 'detalle', 'observacion', 'notas', 'comentario', 'nota')):
+                icon_code = "Icons.notes"
+            elif any(k in lname for k in ('direccion', 'ubicacion', 'ciudad', 'pais', 'calle')):
+                icon_code = "Icons.place_outlined"
+            elif any(k in lname for k in ('nombre', 'name', 'titulo', 'apellido', 'cliente', 'usuario', 'user')):
+                icon_code = "Icons.person_outline"
+            elif attr.type == 'RelationIds' or lname.endswith('id') or lname.endswith('ids'):
+                icon_code = "Icons.link"
+            else:
+                icon_code = "Icons.label_outline"
+
             fields_widgets.append(f"""
             _DetailTile(
               label: '{attr.name.capitalize()}',
               value: item.{attr.name} == null ? 'No especificado' : '${{item.{attr.name}}}',
-              icon: Icons.label_outline,
+              icon: {icon_code},
             ),""")
         fields_str = "\n".join(fields_widgets)
+
+        # Collect operations from class and realized interfaces
+        all_ops = list(getattr(cls, 'operations', []))
+        known_op_names = {op.name for op in all_ops}
+        for rel in self.diagram.relationships:
+            if rel.type == RelationshipType.REALIZATION and rel.source.class_id == cls.id:
+                iface = self.diagram.get_class(rel.target.class_id)
+                if iface:
+                    for op in getattr(iface, 'operations', []):
+                        if op.name not in known_op_names:
+                            known_op_names.add(op.name)
+                            all_ops.append(op)
+
+        operations_card_str = ""
+        if all_ops:
+            op_items = []
+            for op in all_ops:
+                op_method = self._to_camel_case(op.name)
+                ret_type = op.return_type or "void"
+                vis_symbol = "+"
+                vis_color = "Colors.green"
+                if op.visibility == Visibility.PRIVATE:
+                    vis_symbol = "-"
+                    vis_color = "Colors.red"
+                elif op.visibility == Visibility.PROTECTED:
+                    vis_symbol = "#"
+                    vis_color = "Colors.orange"
+                elif op.visibility == Visibility.PACKAGE:
+                    vis_symbol = "~"
+                    vis_color = "Colors.blue"
+
+                params_desc = ", ".join(f"{p.name}: {p.type}" for p in getattr(op, 'parameters', []))
+                sig = f"{vis_symbol} {op.name}({params_desc}): {ret_type}"
+
+                call_args = []
+                for p in getattr(op, 'parameters', []):
+                    pt = self._dart_type(p.type)
+                    if pt == "int":
+                        call_args.append("0")
+                    elif pt == "double":
+                        call_args.append("0.0")
+                    elif pt == "bool":
+                        call_args.append("false")
+                    elif pt == "DateTime":
+                        call_args.append("DateTime.now()")
+                    elif pt == "List<int>":
+                        call_args.append("const []")
+                    elif pt == "String":
+                        call_args.append("''")
+                    else:
+                        call_args.append("null as dynamic")
+                call_args_str = ", ".join(call_args)
+                invocation = f"item.{op_method}({call_args_str});"
+                result_suffix = " correctamente."
+                if ret_type != "void":
+                    invocation = "final res = " + invocation
+                    result_suffix = ": $res"
+
+                op_items.append(f"""
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      radius: 14,
+                      backgroundColor: {vis_color}.withOpacity(0.2),
+                      child: Text('{vis_symbol}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: {vis_color})),
+                    ),
+                    title: Text('{op.name}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: Text('{sig}', style: const TextStyle(fontSize: 11, fontFamily: 'monospace')),
+                    trailing: FilledButton.tonal(
+                      style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), minimumSize: const Size(60, 32)),
+                      onPressed: () {{
+                        try {{
+                          {invocation}
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Operación {op.name}() ejecutada{result_suffix}'),
+                              backgroundColor: Colors.teal,
+                            ),
+                          );
+                        }} catch (e) {{
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error en {op.name}(): $e')),
+                          );
+                        }}
+                      }},
+                      child: const Text('Ejecutar', style: TextStyle(fontSize: 12)),
+                    ),
+                  ),""")
+
+            op_items_str = "\n".join(op_items)
+            operations_card_str = f"""
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: theme.colorScheme.secondaryContainer,
+                        child: Icon(Icons.code, color: theme.colorScheme.onSecondaryContainer),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Operaciones y Métodos UML',
+                        style: (theme.textTheme.titleMedium ?? const TextStyle()).copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
+                  {op_items_str}
+                ],
+              ),
+            ),
+          ),"""
 
         return f"""import 'package:flutter/material.dart';
 import '../../models/{snake}.dart';
@@ -1747,7 +1998,7 @@ class _{cls.name}DetailScreenState extends State<{cls.name}DetailScreen> {{
                 ],
               ),
             ),
-          ),
+          ),{operations_card_str}
         ],
       ),
     );

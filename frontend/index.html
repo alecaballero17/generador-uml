@@ -230,6 +230,7 @@
                     <span>💡 <b>Formato:</b> Primera línea = Nombre, siguientes = <code>atributo: tipo</code></span>
                 </div>
                 <textarea id="mobilePhotoText" aria-label="Texto de la foto para revisar" class="code-textarea" rows="4"></textarea>
+                <p class="muted">Para corregir por voz: «En la clase Usuario cambia el atributo coreo por correo». Revisa el texto antes de importar.</p>
                 <div class="photo-actions-row">
                     <button type="button" id="btnVoiceSupplementPhoto" class="btn-secondary">
                         🎙️ Dictar corrección o atributo
@@ -760,6 +761,27 @@
                         <div class="export-option-info">
                             <strong>Imagen SVG Vectorial</strong>
                             <span>Gráfico vectorial escalable para documentación</span>
+                        </div>
+                    </button>
+                    <button class="export-option-card" id="btnExportPNG">
+                        <div class="export-option-icon">📸</div>
+                        <div class="export-option-info">
+                            <strong>Imagen PNG (Alta Resolución 2x)</strong>
+                            <span>Renderizado rasterizado nítido con fondo para presentaciones</span>
+                        </div>
+                    </button>
+                    <button class="export-option-card" id="btnExportPlantUML">
+                        <div class="export-option-icon">🌱</div>
+                        <div class="export-option-info">
+                            <strong>PlantUML (.puml)</strong>
+                            <span>Código textual compatible con PlantUML y editores</span>
+                        </div>
+                    </button>
+                    <button class="export-option-card" id="btnExportMermaid">
+                        <div class="export-option-icon">📊</div>
+                        <div class="export-option-info">
+                            <strong>Mermaid (.mmd)</strong>
+                            <span>Sintaxis Mermaid para GitHub, Notion y Markdown</span>
                         </div>
                     </button>
                 </div>

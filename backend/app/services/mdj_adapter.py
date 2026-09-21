@@ -130,6 +130,9 @@ class MDJAdapter:
                     attr_node.get("visibility", "private"), "-"
                 )
                 attr.is_static = attr_node.get("isStatic", False)
+                attr.multiplicity = attr_node.get("multiplicity")
+                attr.default_value = attr_node.get("defaultValue")
+                attr.is_derived = attr_node.get("isDerived", False)
 
                 # Type reference
                 type_ref = attr_node.get("type")
@@ -168,6 +171,7 @@ class MDJAdapter:
                     if param_node.get("_type") == "UMLParameter":
                         param = UMLParameter()
                         param.name = param_node.get("name", "")
+                        param.default_value = param_node.get("defaultValue")
                         p_type = param_node.get("type")
                         if isinstance(p_type, str):
                             param.type = p_type
@@ -325,6 +329,60 @@ class MDJAdapter:
             if rel_node:
                 model["ownedElements"].append(rel_node)
 
+        # Export visual diagram and views for StarUML native rendering
+        diag_id = f"diagram_{diagram.id}"
+        class_diagram = {
+            "_type": "UMLClassDiagram",
+            "_id": diag_id,
+            "_parent": {"$ref": model["_id"]},
+            "name": diagram.name or "Main",
+            "ownedViews": []
+        }
+
+        class_views: dict[str, str] = {}
+        for cls in diagram.classes:
+            mdj_id = class_mdj_ids[cls.id]
+            view_type = "UMLInterfaceView" if cls.is_interface else "UMLClassView"
+            view_id = f"view_{cls.id}"
+            class_views[cls.id] = view_id
+            view_node = {
+                "_type": view_type,
+                "_id": view_id,
+                "_parent": {"$ref": diag_id},
+                "model": {"$ref": mdj_id},
+                "left": int(cls.position.x) if cls.position else 100,
+                "top": int(cls.position.y) if cls.position else 100,
+                "width": int(cls.size.width) if cls.size else 200,
+                "height": int(cls.size.height) if cls.size else 120,
+            }
+            class_diagram["ownedViews"].append(view_node)
+
+        # Connector views for relationships
+        rel_view_types = {
+            RelationshipType.ASSOCIATION: "UMLAssociationView",
+            RelationshipType.AGGREGATION: "UMLAssociationView",
+            RelationshipType.COMPOSITION: "UMLAssociationView",
+            RelationshipType.GENERALIZATION: "UMLGeneralizationView",
+            RelationshipType.REALIZATION: "UMLInterfaceRealizationView",
+            RelationshipType.DEPENDENCY: "UMLDependencyView",
+        }
+        for rel in diagram.relationships:
+            tail_view = class_views.get(rel.source.class_id)
+            head_view = class_views.get(rel.target.class_id)
+            if tail_view and head_view:
+                vtype = rel_view_types.get(rel.type, "UMLAssociationView")
+                rel_view = {
+                    "_type": vtype,
+                    "_id": f"view_rel_{rel.id}",
+                    "_parent": {"$ref": diag_id},
+                    "model": {"$ref": f"rel_{rel.id}"},
+                    "tail": {"$ref": tail_view},
+                    "head": {"$ref": head_view},
+                }
+                class_diagram["ownedViews"].append(rel_view)
+
+        model["ownedElements"].append(class_diagram)
+
         return json.dumps(project, indent=2, ensure_ascii=False)
 
     def _export_class_mdj(self, cls: UMLClass, mdj_id: str, parent_id: str) -> dict:
@@ -341,7 +399,7 @@ class MDJAdapter:
         }
 
         for attr in cls.attributes:
-            node["attributes"].append({
+            attr_dict = {
                 "_type": "UMLAttribute",
                 "_id": f"attr_{attr.id}",
                 "name": attr.name,
@@ -349,7 +407,14 @@ class MDJAdapter:
                 "type": attr.type,
                 "isStatic": attr.is_static,
                 "_parent": {"$ref": mdj_id},
-            })
+            }
+            if attr.multiplicity:
+                attr_dict["multiplicity"] = attr.multiplicity
+            if attr.default_value is not None:
+                attr_dict["defaultValue"] = attr.default_value
+            if attr.is_derived:
+                attr_dict["isDerived"] = attr.is_derived
+            node["attributes"].append(attr_dict)
 
         for op in cls.operations:
             op_node = {
@@ -364,13 +429,16 @@ class MDJAdapter:
                 "parameters": [],
             }
             for param in op.parameters:
-                op_node["parameters"].append({
+                p_dict = {
                     "_type": "UMLParameter",
                     "_id": f"param_{param.id}",
                     "name": param.name,
                     "type": param.type,
                     "_parent": {"$ref": op_node["_id"]},
-                })
+                }
+                if param.default_value is not None:
+                    p_dict["defaultValue"] = param.default_value
+                op_node["parameters"].append(p_dict)
             node["operations"].append(op_node)
 
         return node
