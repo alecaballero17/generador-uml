@@ -1,0 +1,33 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 16
+skinparam dpi 160
+skinparam monochrome true
+skinparam classAttributeIconSize 0
+hide circle
+hide empty members
+top to bottom direction
+component "Editor JavaScript\ny lienzo SVG" as UI
+component "Lector local\nOCR y transcripción" as AI
+component "Colaboración cliente" as CC
+component "API FastAPI" as API
+component "Servicio colaborativo" as SC
+component "Validación y\nmodelo UML" as M
+component "Generadores y\nadaptadores" as GEN
+component "Gemini externo" as G
+UI ..> AI : invoca
+UI ..> CC : cambios
+UI ..> API : HTTP
+CC ..> SC : WebSocket
+API ..> M : valida
+API ..> GEN : delega
+GEN ..> M : utiliza
+API ..> G : consulta opcional
+SC ..> M : valida estructura
+note bottom of AI
+Whisper y Tesseract se ejecutan
+localmente en el flujo del editor.
+end note
+@enduml

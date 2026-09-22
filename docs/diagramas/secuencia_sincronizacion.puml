@@ -1,0 +1,45 @@
+@startuml
+title CU-04 — Reconexión con cambios locales
+actor "Colaborador editor" as Usuario
+participant "Editor web / APK" as Cliente
+database "Almacenamiento local" as Local
+participant "Servicio colaborativo" as Servidor
+database "SQLite" as BD
+Usuario -> Cliente : Modificar diagrama sin red
+Cliente -> Local : Guardar borrador y cambios pendientes
+alt Almacenamiento disponible
+  Local --> Cliente : Guardado
+  Cliente --> Usuario : Cambios pendientes de sincronizar
+else Fallo de almacenamiento
+  Local --> Cliente : Error
+  Cliente --> Usuario : Advertencia: no cerrar la aplicación
+end
+... Conectividad recuperada ...
+Cliente -> Servidor : Abrir sesión con permiso del proyecto
+Servidor -> BD : Consultar revisión y autorización
+BD --> Servidor : Estado persistido
+alt Acceso autorizado
+  Servidor --> Cliente : Versión remota y rol
+  Cliente -> Cliente : Comparar base, local y remoto
+  alt Cambios independientes
+    Cliente -> Servidor : Enviar modelo combinado y revisión base
+    Servidor -> BD : Validar y persistir nueva revisión
+    BD --> Servidor : Revisión guardada
+    Servidor --> Cliente : Confirmación
+    Cliente -> Local : Actualizar base y pendientes
+    Cliente --> Usuario : Sincronizado si no hay más cambios
+  else Conflicto en el mismo dato
+    Cliente --> Usuario : Mostrar versiones para resolver
+    Usuario -> Cliente : Elegir resolución
+    Cliente -> Servidor : Enviar resolución
+    note right of Cliente
+    Un envío fallido conserva pendientes.
+    Una confirmación antigua no debe
+    descartar cambios nuevos.
+    end note
+  end
+else Acceso denegado
+  Servidor --> Cliente : Rechazo
+  Cliente --> Usuario : Enlace sin permiso
+end
+@enduml

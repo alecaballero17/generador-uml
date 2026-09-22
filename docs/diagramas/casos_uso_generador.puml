@@ -1,0 +1,41 @@
+@startuml
+left to right direction
+skinparam shadowing false
+title GeneradorUML — Casos de uso
+actor Modelador
+actor "Administrador del proyecto" as Admin
+actor "Colaborador editor" as Editor
+actor Visualizador
+actor "Servicio Gemini" as Gemini
+Admin --|> Modelador
+Editor --|> Modelador
+rectangle "GeneradorUML (web, APK y backend)" {
+  usecase "CU-01 Gestionar elementos" as CU01
+  usecase "CU-02 Definir relaciones" as CU02
+  usecase "CU-03 Compartir acceso" as CU03
+  usecase "CU-04 Editar offline\ny sincronizar" as CU04
+  usecase "CU-05 Modelar mediante voz" as CU05
+  usecase "CU-06 Importar fotografía\ny revisar" as CU06
+  usecase "CU-07 Intercambiar modelos" as CU07
+  usecase "CU-08 Generar proyectos" as CU08
+  usecase "CU-09 Restaurar revisión" as CU09
+  usecase "Consultar diagrama compartido" as Consulta
+}
+Modelador -- CU01
+Modelador -- CU02
+Modelador -- CU05
+Modelador -- CU06
+Modelador -- CU07
+Modelador -- CU08
+Admin -- CU03
+Admin -- CU09
+Editor -- CU04
+Admin -- CU04
+Visualizador -- Consulta
+Modelador -- Consulta
+Gemini -- CU05
+note right of Gemini
+Participa en la interpretación en línea.
+El modo local no depende de este servicio.
+end note
+@enduml

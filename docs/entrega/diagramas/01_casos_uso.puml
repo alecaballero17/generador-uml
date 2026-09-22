@@ -1,0 +1,44 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 16
+skinparam dpi 160
+skinparam monochrome true
+skinparam classAttributeIconSize 0
+hide circle
+hide empty members
+left to right direction
+actor Modelador as M
+actor Administrador as A
+actor Editor as E
+actor Visualizador as V
+actor "Gemini\nservicio externo" as G
+A --|> M
+E --|> M
+rectangle GeneradorUML {
+usecase "CU01 Gestionar elementos" as U1
+usecase "CU02 Definir relaciones" as U2
+usecase "CU03 Compartir acceso" as U3
+usecase "CU04 Editar offline\ny sincronizar" as U4
+usecase "CU05 Modelar por voz" as U5
+usecase "CU06 Importar foto\ny revisar" as U6
+usecase "CU07 Intercambiar modelos" as U7
+usecase "CU08 Generar proyectos" as U8
+usecase "CU09 Restaurar revisión" as U9
+usecase "Consultar diagrama" as Q
+}
+M -- U1
+M -- U2
+M -- U5
+M -- U6
+M -- U7
+M -- U8
+M -- Q
+A -- U3
+A -- U9
+E -- U4
+A -- U4
+V -- Q
+G -- U5
+@enduml

@@ -1,0 +1,94 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 15
+skinparam dpi 220
+skinparam roundcorner 0
+
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam ArrowColor #333333
+skinparam ArrowThickness 1
+skinparam classAttributeIconSize 0
+skinparam class {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+ FontColor #111111
+ FontStyle bold
+ AttributeFontColor #111111
+}
+skinparam package {
+ BackgroundColor #FFFFFF
+ BorderColor #555555
+}
+skinparam component {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+}
+skinparam node {
+ BackgroundColor #F7F7F7
+ BorderColor #333333
+}
+skinparam artifact {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+}
+skinparam sequence {
+ ParticipantBackgroundColor #FFFDEB
+ ParticipantBorderColor #333333
+ LifeLineBorderColor #888888
+ LifeLineBackgroundColor #FFFFFF
+ GroupBackgroundColor #FFFFFF
+ GroupBorderColor #777777
+}
+skinparam usecase {
+ BackgroundColor #FFFFFF
+ BorderColor #333333
+}
+skinparam state {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+}
+hide circle
+hide empty members
+
+top to bottom direction
+skinparam linetype polyline
+class UMLDiagram {
++id: str
++name: str
++uml_version: str
++add_class(c: UMLClass): UMLClass
++remove_class(class_id: str): bool
++to_dict(): dict
+}
+class UMLClass {
++id: str
++name: str
++is_abstract: bool
++is_interface: bool
++to_dict(): dict
+}
+class UMLAttribute {
++name: str
++type: str
++visibility: Visibility
++to_uml_string(): str
+}
+class UMLOperation {
++name: str
++return_type: str
++visibility: Visibility
++to_uml_string(): str
+}
+class UMLParameter {
++name: str
++type: str
++default_value: str [0..1]
+}
+UMLDiagram "1" --> "0..*" UMLClass : classes
+UMLClass "1" --> "0..*" UMLAttribute : attributes
+UMLClass "1" --> "0..*" UMLOperation : operations
+UMLOperation "1" --> "0..*" UMLParameter : parameters
+@enduml

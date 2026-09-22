@@ -1,0 +1,78 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 15
+skinparam dpi 220
+skinparam roundcorner 0
+
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam ArrowColor #333333
+skinparam ArrowThickness 1
+skinparam classAttributeIconSize 0
+skinparam class {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+ FontColor #111111
+ FontStyle bold
+ AttributeFontColor #111111
+}
+skinparam package {
+ BackgroundColor #FFFFFF
+ BorderColor #555555
+}
+skinparam component {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+}
+skinparam node {
+ BackgroundColor #F7F7F7
+ BorderColor #333333
+}
+skinparam artifact {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+}
+skinparam sequence {
+ ParticipantBackgroundColor #FFFDEB
+ ParticipantBorderColor #333333
+ LifeLineBorderColor #888888
+ LifeLineBackgroundColor #FFFFFF
+ GroupBackgroundColor #FFFFFF
+ GroupBorderColor #777777
+}
+skinparam usecase {
+ BackgroundColor #FFFFFF
+ BorderColor #333333
+}
+skinparam state {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+}
+hide circle
+hide empty members
+
+actor Editor as U
+participant "Cliente" as C
+participant "Almacenamiento local" as L
+participant "Servidor" as S
+U -> C : Editar sin red
+C -> L : Guardar borrador y pendientes
+... Reconexión ...
+C -> S : Autenticar enlace
+S --> C : Revisión remota y rol
+C -> C : Comparar base, local y remoto
+alt Cambios independientes
+C -> S : Enviar versión combinada
+S --> C : Confirmar nueva revisión
+C -> L : Guardar base actualizada
+C --> U : Sincronizado si no quedan cambios
+else Conflicto
+C --> U : Mostrar ambas versiones
+U -> C : Elegir resolución
+C -> S : Enviar resolución
+else Enlace sin permiso
+C --> U : Acceso denegado
+end
+@enduml

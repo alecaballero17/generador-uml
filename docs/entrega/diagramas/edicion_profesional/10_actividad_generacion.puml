@@ -1,0 +1,71 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 15
+skinparam dpi 220
+skinparam roundcorner 0
+
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam ArrowColor #333333
+skinparam ArrowThickness 1
+skinparam classAttributeIconSize 0
+skinparam class {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+ FontColor #111111
+ FontStyle bold
+ AttributeFontColor #111111
+}
+skinparam package {
+ BackgroundColor #FFFFFF
+ BorderColor #555555
+}
+skinparam component {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+}
+skinparam node {
+ BackgroundColor #F7F7F7
+ BorderColor #333333
+}
+skinparam artifact {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+}
+skinparam sequence {
+ ParticipantBackgroundColor #FFFDEB
+ ParticipantBorderColor #333333
+ LifeLineBorderColor #888888
+ LifeLineBackgroundColor #FFFFFF
+ GroupBackgroundColor #FFFFFF
+ GroupBorderColor #777777
+}
+skinparam usecase {
+ BackgroundColor #FFFFFF
+ BorderColor #333333
+}
+skinparam state {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+}
+hide circle
+hide empty members
+
+start
+:Elegir diagrama y opciones;
+:Validar modelo;
+if (¿Modelo válido?) then (sí)
+:Seleccionar generadores;
+:Transformar modelo en archivos;
+:Preparar descarga;
+:Guardar ZIP;
+:Configurar entorno del proyecto generado;
+:Compilar y ejecutar como validación adicional;
+else (no)
+:Mostrar errores;
+:Corregir diagrama;
+endif
+stop
+@enduml

@@ -1,0 +1,87 @@
+@startuml
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 15
+skinparam dpi 220
+skinparam roundcorner 0
+
+skinparam nodesep 45
+skinparam ranksep 50
+skinparam ArrowColor #333333
+skinparam ArrowThickness 1
+skinparam classAttributeIconSize 0
+skinparam class {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+ FontColor #111111
+ FontStyle bold
+ AttributeFontColor #111111
+}
+skinparam package {
+ BackgroundColor #FFFFFF
+ BorderColor #555555
+}
+skinparam component {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+}
+skinparam node {
+ BackgroundColor #F7F7F7
+ BorderColor #333333
+}
+skinparam artifact {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+}
+skinparam sequence {
+ ParticipantBackgroundColor #FFFDEB
+ ParticipantBorderColor #333333
+ LifeLineBorderColor #888888
+ LifeLineBackgroundColor #FFFFFF
+ GroupBackgroundColor #FFFFFF
+ GroupBorderColor #777777
+}
+skinparam usecase {
+ BackgroundColor #FFFFFF
+ BorderColor #333333
+}
+skinparam state {
+ BackgroundColor #FFFDEB
+ BorderColor #333333
+}
+hide circle
+hide empty members
+
+top to bottom direction
+skinparam linetype polyline
+node "Computadora del usuario" <<device>> {
+node "Navegador" <<executionEnvironment>> {
+artifact "Editor web" as WEB
+artifact "Caché y borrador local" as WC
+}
+}
+node "Teléfono Android" <<device>> {
+node "Android y WebView" <<executionEnvironment>> {
+artifact "Graficador UML APK" as APK
+artifact "Modelos y borrador local" as AC
+}
+}
+node "Equipo servidor" <<device>> {
+node "Python y FastAPI" <<executionEnvironment>> {
+artifact "API y colaboración" as API
+}
+artifact "SQLite" as DB
+artifact "Fuentes generadas ZIP" as ZIP
+}
+cloud "Servicio externo" {
+node "Gemini" as GEM
+}
+WEB -- API : HTTP y WebSocket
+APK -- API : HTTP y WebSocket\ncuando hay conexión
+API -- DB : persistencia
+API -- ZIP : generación
+API -- GEM : consulta en línea
+WEB -- WC
+APK -- AC
+@enduml

@@ -1,0 +1,33 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 16
+skinparam dpi 160
+skinparam monochrome true
+skinparam classAttributeIconSize 0
+hide circle
+hide empty members
+actor Editor as U
+participant "Cliente" as C
+participant "Almacenamiento local" as L
+participant "Servidor" as S
+U -> C : Editar sin red
+C -> L : Guardar borrador y pendientes
+... Reconexión ...
+C -> S : Autenticar enlace
+S --> C : Revisión remota y rol
+C -> C : Comparar base, local y remoto
+alt Cambios independientes
+C -> S : Enviar versión combinada
+S --> C : Confirmar nueva revisión
+C -> L : Guardar base actualizada
+C --> U : Sincronizado si no quedan cambios
+else Conflicto
+C --> U : Mostrar ambas versiones
+U -> C : Elegir resolución
+C -> S : Enviar resolución
+else Enlace sin permiso
+C --> U : Acceso denegado
+end
+@enduml

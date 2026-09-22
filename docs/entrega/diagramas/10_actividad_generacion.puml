@@ -1,0 +1,26 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 16
+skinparam dpi 160
+skinparam monochrome true
+skinparam classAttributeIconSize 0
+hide circle
+hide empty members
+start
+:Elegir diagrama y opciones;
+:Validar modelo;
+if (¿Modelo válido?) then (sí)
+:Seleccionar generadores;
+:Transformar modelo en archivos;
+:Preparar descarga;
+:Guardar ZIP;
+:Configurar entorno del proyecto generado;
+:Compilar y ejecutar como validación adicional;
+else (no)
+:Mostrar errores;
+:Corregir diagrama;
+endif
+stop
+@enduml

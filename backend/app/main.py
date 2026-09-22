@@ -7,12 +7,14 @@ Punto de entrada del backend. Sirve la API REST y el editor web estático.
 from __future__ import annotations
 import os
 import json
+import re
 import shutil
 import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from urllib.parse import unquote
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -60,6 +62,30 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 OUTPUT_DIR = BASE_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
+PROJECT_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,128}")
+
+
+def validate_project_id(project_id: str) -> str:
+    """Allow opaque, URL-safe project IDs only before they reach the filesystem."""
+    if (
+        not isinstance(project_id, str)
+        or unquote(project_id) != project_id
+        or not PROJECT_ID_PATTERN.fullmatch(project_id)
+    ):
+        raise HTTPException(status_code=400, detail="Identificador de proyecto inválido")
+    return project_id
+
+
+def project_file_path(project_id: str) -> Path:
+    """Return a project file path guaranteed to stay under output/projects."""
+    safe_id = validate_project_id(project_id)
+    projects_dir = (OUTPUT_DIR / "projects").resolve()
+    project_file = (projects_dir / f"{safe_id}.json").resolve()
+    try:
+        project_file.relative_to(projects_dir)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Identificador de proyecto inválido") from exc
+    return project_file
 
 
 # ─── Pydantic Models ──────────────────────────────────────────────────────
@@ -264,7 +290,7 @@ async def generate_and_download(request: GenerationRequest):
 async def save_project(request: ProjectSaveRequest):
     """Save a project (diagram + metadata)."""
     import uuid as uuid_mod
-    project_id = request.projectId or str(uuid_mod.uuid4())
+    project_id = str(uuid_mod.uuid4()) if request.projectId is None else validate_project_id(request.projectId)
 
     diagram = UMLDiagram.from_dict(request.diagram.model_dump())
     diagram.updated_at = datetime.now().isoformat()
@@ -280,9 +306,8 @@ async def save_project(request: ProjectSaveRequest):
     }
 
     # Also save to disk
-    projects_dir = OUTPUT_DIR / "projects"
-    projects_dir.mkdir(exist_ok=True)
-    project_file = projects_dir / f"{project_id}.json"
+    project_file = project_file_path(project_id)
+    project_file.parent.mkdir(exist_ok=True)
     project_file.write_text(
         json.dumps(projects[project_id], indent=2, ensure_ascii=False),
         encoding="utf-8"
@@ -334,9 +359,10 @@ async def list_projects():
 @app.get("/api/projects/{project_id}")
 async def get_project(project_id: str):
     """Get a specific project from memory, disk, or collaboration SQLite store."""
+    project_id = validate_project_id(project_id)
     if project_id not in projects:
         # Try loading from disk
-        project_file = OUTPUT_DIR / "projects" / f"{project_id}.json"
+        project_file = project_file_path(project_id)
         if project_file.exists():
             try:
                 data = json.loads(project_file.read_text(encoding="utf-8"))
@@ -370,8 +396,9 @@ async def get_project(project_id: str):
 @app.delete("/api/projects/{project_id}")
 async def delete_project(project_id: str):
     """Delete a project."""
+    project_id = validate_project_id(project_id)
     projects.pop(project_id, None)
-    project_file = OUTPUT_DIR / "projects" / f"{project_id}.json"
+    project_file = project_file_path(project_id)
     if project_file.exists():
         project_file.unlink()
     return {"deleted": True}

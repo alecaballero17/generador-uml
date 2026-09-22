@@ -1,0 +1,35 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 16
+skinparam dpi 160
+skinparam monochrome true
+skinparam classAttributeIconSize 0
+hide circle
+hide empty members
+actor Modelador as U
+participant "Interfaz" as UI
+participant "Lector local" as L
+participant "Tesseract" as OCR
+participant "Modelo UML" as M
+U -> UI : Seleccionar imagen
+UI -> L : recognizeLocalPhoto(imagen)
+L -> L : Estimar inclinación y separar cajas
+L -> OCR : Reconocer compartimentos
+OCR --> L : Texto
+L --> UI : Texto y conexiones candidatas
+U -> UI : Revisar y corregir texto
+U -> UI : Confirmar importación
+UI -> UI : Validar lote completo
+alt Datos válidos
+UI -> M : Incorporar clases y operaciones
+UI --> U : Mostrar resultado y opción deshacer
+else Duplicados o datos inválidos
+UI --> U : Mostrar error y conservar modelo
+end
+note over UI,M
+Las relaciones candidatas requieren
+revisión explícita antes de agregarse.
+end note
+@enduml

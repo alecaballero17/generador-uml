@@ -1,0 +1,34 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 16
+skinparam dpi 160
+skinparam monochrome true
+skinparam classAttributeIconSize 0
+hide circle
+hide empty members
+top to bottom direction
+class Cliente {
+-id: Long
+-nombre: String
++actualizarTelefono(telefono: String): void
+}
+class Pedido {
+-id: Long
+-fecha: LocalDate
++calcularTotal(): Double
+}
+class LineaPedido {
+-cantidad: Integer
+-precioUnitario: Double
++subtotal(): Double
+}
+Cliente "1" -- "0..*" Pedido : realiza
+Pedido "1" *-- "1..*" LineaPedido : contiene
+note bottom of LineaPedido
+Ejemplo didáctico propuesto.
+Las operaciones requieren lógica de negocio;
+la firma no define su implementación.
+end note
+@enduml

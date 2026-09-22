@@ -1,0 +1,41 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 16
+skinparam dpi 160
+skinparam monochrome true
+skinparam classAttributeIconSize 0
+hide circle
+hide empty members
+top to bottom direction
+node "Computadora del usuario" <<device>> {
+node "Navegador" <<executionEnvironment>> {
+artifact "Editor web" as WEB
+artifact "Caché y borrador local" as WC
+}
+}
+node "Teléfono Android" <<device>> {
+node "Android y WebView" <<executionEnvironment>> {
+artifact "Graficador UML APK" as APK
+artifact "Modelos y borrador local" as AC
+}
+}
+node "Equipo servidor" <<device>> {
+node "Python y FastAPI" <<executionEnvironment>> {
+artifact "API y colaboración" as API
+}
+artifact "SQLite" as DB
+artifact "Fuentes generadas ZIP" as ZIP
+}
+cloud "Servicio externo" {
+node "Gemini" as GEM
+}
+WEB -- API : HTTP y WebSocket
+APK -- API : HTTP y WebSocket\ncuando hay conexión
+API -- DB : persistencia
+API -- ZIP : generación
+API -- GEM : consulta en línea
+WEB -- WC
+APK -- AC
+@enduml

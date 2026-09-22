@@ -1,0 +1,23 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 16
+skinparam dpi 160
+skinparam monochrome true
+skinparam classAttributeIconSize 0
+hide circle
+hide empty members
+hide empty description
+[*] --> Local
+Local --> Pendiente : editar
+Pendiente --> Enviando : conexión y permiso
+Enviando --> Sincronizado : confirmación
+Enviando --> Pendiente : fallo o nueva edición
+Pendiente --> Conflicto : conflicto
+Conflicto --> Pendiente : resolver
+Sincronizado --> Pendiente : editar
+Sincronizado --> Local : desconectar
+Pendiente --> SinPermiso : acceso denegado
+SinPermiso --> Pendiente : acceso válido
+@enduml

@@ -1,0 +1,33 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 16
+skinparam dpi 160
+skinparam monochrome true
+skinparam classAttributeIconSize 0
+hide circle
+hide empty members
+left to right direction
+class UMLDiagram
+class UMLValidator {
++validate(): ValidationResult
+}
+class SpringBootGenerator {
++generate(): dict
+}
+class FlutterGenerator {
++generate_all(): dict
+}
+class XMIAdapter
+class MDJAdapter
+UMLValidator --> UMLDiagram : analiza
+SpringBootGenerator --> UMLDiagram : transforma
+FlutterGenerator --> UMLDiagram : transforma
+XMIAdapter ..> UMLDiagram : importa y exporta
+MDJAdapter ..> UMLDiagram : importa y exporta
+note bottom of UMLDiagram
+No se modela una superclase generadora
+común porque no está en el código.
+end note
+@enduml

@@ -1122,8 +1122,14 @@ $('#projectName').addEventListener('change', (e) => {
 });
 
 async function saveProject() {
+    state.model.name = $('#projectName').value;
+
+    // Preserve the local snapshot and collaboration queue before attempting
+    // the optional REST persistence. This keeps manual saves safe offline.
+    broadcastChange();
+    persistCollaboration();
+
     try {
-        state.model.name = $('#projectName').value;
         const response = await umlApiFetch('/api/projects/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1133,14 +1139,21 @@ async function saveProject() {
                 diagram: state.model.toJSON(),
             }),
         });
-        const data = await response.json();
-        showToast('Proyecto guardado', 'success');
+        if (!response.ok) {
+            throw new Error(`El servidor respondió ${response.status}`);
+        }
+        await response.json();
 
-        // Also save to localStorage for offline
+        // Keep the legacy project-id snapshot in addition to the collaborative
+        // snapshot written by persistCollaboration().
         localStorage.setItem(`project_${state.model.id}`, JSON.stringify(state.model.toJSON()));
+        showToast('Proyecto guardado y sincronización local activa', 'success');
     } catch (err) {
-        // Offline fallback: save to localStorage
-        localStorage.setItem(`project_${state.model.id}`, JSON.stringify(state.model.toJSON()));
+        // The collaboration snapshot above is the main offline fallback. Keep
+        // this legacy key too when storage is available.
+        try {
+            localStorage.setItem(`project_${state.model.id}`, JSON.stringify(state.model.toJSON()));
+        } catch (_) { /* persistCollaboration already exposes local-save errors */ }
         showToast('Guardado localmente (sin conexión)', 'warning');
     }
 }
@@ -2051,21 +2064,6 @@ function saveCurrentProjectToStorage() {
         console.warn('No se pudo guardar en localStorage', e);
     }
 }
-
-async function saveProject() {
-    broadcastChange();
-    persistCollaboration();
-    showToast(state.ws?.readyState === WebSocket.OPEN ? 'Guardado local; sincronización automática activa' : 'Guardado en este dispositivo. Se sincronizará al reconectar.', 'info');
-}
-
-$('#btnSave').addEventListener('click', saveProject);
-
-window.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        saveProject();
-    }
-});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Real-Time Collaboration (WebSocket)
