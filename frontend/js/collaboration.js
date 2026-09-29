@@ -1,7 +1,9 @@
 // Shared endpoint for the packaged editor and the browser editor.
 function umlBackendOrigin() {
     if(location.host!=='appassets.androidplatform.net' && location.protocol!=='file:')return location.origin;
-    const configured=localStorage.getItem('uml_backend_url')||'http://127.0.0.1:8000';
+    // The packaged Android editor defaults to the public service. A user can
+    // still change it from the connection dialog for a local development server.
+    const configured=localStorage.getItem('uml_backend_url')||'https://generador-uml.onrender.com';
     const url=new URL(configured);
     if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw new Error('Dirección de servidor inválida');
     return url.origin;

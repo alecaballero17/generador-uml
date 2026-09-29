@@ -5,7 +5,7 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync('frontend/js/collaboration.js','utf8').split('const collaborationClientId')[0],context);
 (async()=>{
  await vm.runInContext("umlApiFetch('/api/generate',{method:'POST'})",context);
- assert.equal(requests[0].url,'http://127.0.0.1:8000/api/generate');
+ assert.equal(requests[0].url,'https://generador-uml.onrender.com/api/generate');
  configured='https://uml.example.test/';
  await vm.runInContext("umlApiFetch('/api/collaboration/demo/invite',{method:'POST'})",context);
  assert.equal(requests[1].url,'https://uml.example.test/api/collaboration/demo/invite');
