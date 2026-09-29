@@ -14,6 +14,21 @@ def test_photo_interpret_empty_file_rejected():
         assert "vacío" in response.json()["detail"]
 
 
+def test_import_xmi_accepts_enterprise_architect_windows_1252_export():
+    """EA's native XMI export declares Windows-1252 rather than UTF-8."""
+    xmi = '''<?xml version="1.0" encoding="windows-1252"?>
+<xmi:XMI xmlns:xmi="http://schema.omg.org/spec/XMI/2.1" xmlns:uml="http://schema.omg.org/spec/UML/2.1" xmi:version="2.1">
+  <uml:Model xmi:type="uml:Model" name="Prueba ñ">
+    <packagedElement xmi:type="uml:Class" xmi:id="EAID_C1" name="Cliente"/>
+  </uml:Model>
+</xmi:XMI>'''.encode("cp1252")
+    with TestClient(app) as client:
+        response = client.post("/api/import/xmi", files={"file": ("ea-export.xmi", xmi, "application/xml")})
+    assert response.status_code == 200
+    assert response.json()["diagram"]["name"] == "Prueba ñ"
+    assert response.json()["diagram"]["classes"][0]["name"] == "Cliente"
+
+
 def test_photo_interpret_oversized_file_rejected(monkeypatch):
     monkeypatch.setattr("app.main.MAX_PHOTO_SIZE", 1024)  # Temporarily set to 1KB
     with TestClient(app) as client:

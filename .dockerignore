@@ -1,0 +1,13 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.runtime
+output
+.env
+backend/.env
+docs
+mobile-android/.gradle
+mobile-android/app/build

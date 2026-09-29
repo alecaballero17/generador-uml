@@ -60,7 +60,9 @@ projects: dict[str, dict] = {}  # project_id -> {diagram: UMLDiagram, ...}
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
-OUTPUT_DIR = BASE_DIR / "output"
+# In Cloud Run this can point to a mounted storage location. Locally it keeps
+# the original output/ directory so existing projects continue to work.
+OUTPUT_DIR = Path(os.environ.get("APP_DATA_DIR", str(BASE_DIR / "output"))).resolve()
 OUTPUT_DIR.mkdir(exist_ok=True)
 PROJECT_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,128}")
 
@@ -437,8 +439,14 @@ async def import_xmi(file: UploadFile = File(...)):
     """Import a diagram from an XMI 2.1 file (Enterprise Architect / StarUML)."""
     try:
         content = await file.read()
+        # Enterprise Architect exports its native XMI as Windows-1252 by
+        # default, while other UML tools generally use UTF-8.
+        try:
+            xmi_content = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            xmi_content = content.decode("cp1252")
         adapter = XMIAdapter()
-        diagram = adapter.import_from_xmi(content.decode("utf-8"))
+        diagram = adapter.import_from_xmi(xmi_content)
         return {
             "success": True,
             "diagram": diagram.to_dict(),

@@ -2005,6 +2005,7 @@ $('#btnProcessPhoto').addEventListener('click', async () => {
         let edit=document.getElementById('webPhotoText');
         if(!edit){const label=document.createElement('label');label.textContent='Revisar y corregir texto antes de importar';edit=document.createElement('textarea');edit.id='webPhotoText';edit.rows=12;edit.style.width='100%';label.append(edit);notes.after(label);}
         edit.value=photo.text;
+        renderPhotoOcrDiagnostics(photo.diagnostics, notes);
 
         showToast(`Interpretación completada: ${result.detectedClassCount} clases encontradas`, 'success');
     } catch (err) {

@@ -57,6 +57,27 @@ python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ---
 
+## ☁️ Despliegue web en Google Cloud Run
+
+El proyecto está preparado para desplegar **un solo servicio**: FastAPI sirve tanto
+la API como el editor web. El `Dockerfile` incorpora Tesseract con español para el OCR.
+
+1. Instala e inicia sesión en la [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) y selecciona tu proyecto de Google Cloud.
+2. Crea en **Secret Manager** un secreto llamado `gemini-api-key` con tu clave de Gemini. Nunca subas esa clave al repositorio ni la escribas en el Dockerfile.
+3. Desde la raíz del proyecto ejecuta:
+
+```powershell
+gcloud run deploy generador-uml --source . --region us-central1 --allow-unauthenticated --set-secrets GEMINI_API_KEY=gemini-api-key:1
+```
+
+4. Al terminar, Google Cloud mostrará una URL pública. Ábrela para usar la versión web completa desde cualquier navegador.
+
+> Cloud Run trata el disco del contenedor como temporal. La edición, IA, OCR, XMI y generación funcionan al publicarlo; para conservar proyectos y salas colaborativas después de reinicios debemos añadir una base de datos administrada antes de una entrega de producción.
+
+La app Android se conectará a esta misma URL en el siguiente paso, eliminando la dependencia del PC y de `adb reverse`.
+
+---
+
 ## 🏗️ Arquitectura del Sistema
 
 ```mermaid

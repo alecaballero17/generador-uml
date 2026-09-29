@@ -3,6 +3,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import os
 import secrets
 import sqlite3
 from pathlib import Path
@@ -132,7 +133,9 @@ class Store:
         return {'revision': next_revision, 'diagram': joined}
 
 
-store = Store(Path(__file__).resolve().parents[3] / '.runtime' / 'collaboration.sqlite3')
+BASE_DIR = Path(__file__).resolve().parents[3]
+DATA_DIR = Path(os.environ.get('APP_DATA_DIR', str(BASE_DIR / 'output'))).resolve()
+store = Store(DATA_DIR / '.runtime' / 'collaboration.sqlite3')
 connections = {}
 locks = {}
 _rate_limits: dict[str, list[float]] = {}

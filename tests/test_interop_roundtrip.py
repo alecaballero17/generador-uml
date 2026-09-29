@@ -334,9 +334,24 @@ class TestMDJRoundtrip:
         xml_str = adapter.export_to_xmi(original)
 
         assert '<xmi:Extension extender="Enterprise Architect"' in xml_str
+        assert '<xmi:Documentation exporter="Enterprise Architect" exporterVersion="6.5"' in xml_str
+        package_id = adapter._ea_identifier("EAPK", original.id)
+        assert "-" not in package_id
+        assert package_id.startswith("EAPK_")
+        assert f'xmi:id="{package_id}"' in xml_str
         assert '<diagrams>' in xml_str
         assert '<elements>' in xml_str
-        assert '<connectors>' in xml_str
         assert 'geometry="Left=' in xml_str
+        assert 'geometry="SX=0;SY=0;EX=0;EY=0;Path=;"' in xml_str
+        assert f'<model package="{package_id}" owner="{package_id}" localID="1"' in xml_str
+        assert '<properties name="TestRoundtrip" type="Logical"' in xml_str
+        assert '<style1 value="ShowPrivate=1;' in xml_str
         for rel in original.relationships:
-            assert f'subject="rel_{rel.id}"' in xml_str
+            rel_id = adapter._ea_identifier("EAID", f"relationship:{rel.id}")
+            assert f'subject="{rel_id}"' in xml_str
+            if rel.type in (RelationshipType.ASSOCIATION, RelationshipType.AGGREGATION, RelationshipType.COMPOSITION):
+                source_end_id = adapter._ea_identifier("EAID", f"relationship:{rel.id}:source-end")
+                target_end_id = adapter._ea_identifier("EAID", f"relationship:{rel.id}:target-end")
+                assert f'memberEnd="{source_end_id} {target_end_id}"' in xml_str
+                assert f'xmi:id="{source_end_id}" association="{rel_id}"' in xml_str
+                assert f'xmi:id="{target_end_id}" association="{rel_id}"' in xml_str

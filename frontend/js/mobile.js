@@ -638,6 +638,10 @@ function initMobileEditor() {
                 mainLayout.classList.toggle('visible');
                 if (mainLayout.classList.contains('visible')) {
                     mainLayout.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // The mobile preview has a bounded viewport; fit the whole
+                    // diagram whenever it becomes visible instead of clipping
+                    // classes below the initial viewport.
+                    requestAnimationFrame(() => document.getElementById('btnZoomFit')?.click());
                     btnCanvasToggle.style.borderColor = 'var(--accent-primary)';
                 } else {
                     btnCanvasToggle.style.borderColor = '';
@@ -689,6 +693,7 @@ function initMobileEditor() {
             $('#mobilePhotoText').value = rawText.text;
             renderPhotoConnections(rawText);
             $('#mobilePhotoReview').hidden = false;
+            renderPhotoOcrDiagnostics(rawText.diagnostics, document.getElementById('mobilePhotoReview'));
             if (status) status.textContent = rawText.structured ? `Se separaron ${rawText.count} clases para revisar. Los tipos no indicados se importan como texto. Revisa también los métodos. Las relaciones todavía deben añadirse manualmente.` : 'No se pudieron separar las clases. El texto es una lectura sin verificar: corrígelo antes de importar.';
         } catch (e) {
             if (status) status.textContent = 'Error al leer imagen: ' + e.message;

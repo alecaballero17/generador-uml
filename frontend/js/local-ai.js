@@ -181,31 +181,88 @@ async function prepareOffline() {
 function detectPhotoBoxes(image) {
     const {width:w,height:h,data}=image;
     const dark=(x,y)=>{const i=(y*w+x)*4;return data[i]+data[i+1]+data[i+2]<330;};
+    const minWidth=Math.max(90,Math.round(w*.045)),minHeight=Math.max(60,Math.round(h*.06));
+    // A pen lift or a photographed/reflected section can interrupt a border
+    // by several percent of the image width. This is still bounded; the
+    // resulting candidate must independently satisfy both vertical sides.
+    const horizontalGap=Math.max(3,Math.round(w*.06));
+    const endpointTolerance=Math.max(5,Math.round(w*.06));
+    // This is deliberately used only *after* an outer rectangle has been
+    // found. A photographed outer border may be interrupted, whereas a
+    // divider is recognized from broad horizontal evidence inside that box.
+    // Text strokes can be long, but they do not have enough ink near both
+    // interior ends and across most of the row. Measurements are box-relative.
+    const structuralBands=(left,right,top,bottom)=>{
+        const span=Math.max(1,right-left),edge=Math.max(8,Math.round(span*.06)),rows=[];
+        for(let y=top;y<=bottom;y++){
+            const inkAt=x=>{for(let dy=-2;dy<=2;dy++)if(y+dy>=0&&y+dy<h&&dark(x,y+dy))return true;return false;};
+            let covered=0;
+            for(let x=left;x<=right;x++){
+                if(inkAt(x))covered++;
+            }
+            const endDensity=side=>{
+                let ink=0,total=0;
+                // Ignore the actual vertical border: it is dark on every row
+                // and would otherwise make any nearby text look connected.
+                const start=side==='left'?left+1:left-edge,end=side==='left'?left+edge:right-1;
+                for(let x=start;x<=end;x++){total++;if(inkAt(x))ink++;}
+                return total?ink/total:0;
+            };
+            // The 0.62 coverage accepts antialiasing and small gaps; 0.20 at
+            // both ends rejects a long underline isolated from the borders.
+            if(covered/(span+1)>=.62&&endDensity('left')>=.20&&endDensity('right')>=.20)rows.push(y);
+        }
+        const bands=[];
+        for(const y of rows){const last=bands[bands.length-1];if(last&&y-last.bottom<=3)last.bottom=y;else bands.push({top:y,bottom:y});}
+        return bands.map(b=>({top:b.top,bottom:b.bottom,center:Math.round((b.top+b.bottom)/2)}));
+    };
     const groups=[];
     for(let y=0;y<h;y++) {
-        let start=-1;
+        let start=-1,lastInk=-1;
         for(let x=0;x<=w;x++) {
-            if(x<w&&dark(x,y)){if(start<0)start=x;continue;}
-            if(start>=0&&x-start>=Math.max(55,w*.045)) {
-                let group=groups.find(g=>Math.abs(g.x-start)<=5&&Math.abs(g.right-x)<=5);
-                if(!group){group={x:start,right:x,rows:[]};groups.push(group);}
+            if(x<w&&dark(x,y)){if(start<0)start=x;lastInk=x;continue;}
+            // A photographed rule can contain a short white break from glare,
+            // antialiasing or a pen lift. Keep one candidate span while the
+            // gap remains small relative to the whole source image.
+            if(start>=0&&x-lastInk<=horizontalGap)continue;
+            if(start>=0&&lastInk-start+1>=Math.max(55,w*.045)) {
+                const right=lastInk+1;
+                let group=groups.find(g=>Math.abs(g.x-start)<=endpointTolerance&&Math.abs(g.right-right)<=endpointTolerance);
+                if(!group){group={x:start,right,rows:[]};groups.push(group);}
                 const last=group.rows[group.rows.length-1];
                 if(last!==undefined&&y-last<5)group.rows[group.rows.length-1]=y;
                 else group.rows.push(y);
             }
-            start=-1;
+            start=-1;lastInk=-1;
         }
     }
     const boxes=[];
     for(const g of groups) {
-        if(g.rows.length<3)continue;
+        if(g.rows.length<2)continue;
         const top=g.rows[0],bottom=g.rows[g.rows.length-1];
-        if(bottom-top<35)continue;
-        const vertical=x=>{let hits=0;for(let y=top;y<=bottom;y++){let found=false;for(let dx=-4;dx<=4;dx++)if(x+dx>=0&&x+dx<w&&dark(x+dx,y))found=true;if(found)hits++;}return hits/(bottom-top+1);};
-        if(vertical(g.x)<.85||vertical(g.right-1)<.85)continue;
-        boxes.push({x:g.x+5,y:top+5,width:g.right-g.x-10,height:bottom-top-10,headerBottom:g.rows[1]-4,attributesBottom:g.rows[2]-4});
+        if(g.right-g.x<minWidth||bottom-top<minHeight)continue;
+        const verticalTolerance=Math.max(4,Math.round((g.right-g.x)*.06));
+        const vertical=x=>{let hits=0;for(let y=top;y<=bottom;y++){let found=false;for(let dx=-verticalTolerance;dx<=verticalTolerance;dx++)if(x+dx>=0&&x+dx<w&&dark(x+dx,y))found=true;if(found)hits++;}return hits/(bottom-top+1);};
+        if(vertical(g.x)<.72||vertical(g.right-1)<.72)continue;
+        const bands=structuralBands(g.x,g.right-1,top,bottom);
+        // Do not require a perfect horizontal/vertical join here. The prior
+        // candidate plus tolerant vertical-support check establishes the outer
+        // rectangle; bands are only candidates for internal compartments.
+        const inset=Math.max(3,Math.round(Math.min(g.right-g.x,bottom-top)*.015));
+        const minCompartment=Math.max(12,Math.round((bottom-top)*.06));
+        const dividerYs=bands.slice(1,-1).map(b=>b.center).filter(y=>y-top>=minCompartment&&bottom-y>=minCompartment);
+        const headerBottom=dividerYs[0]===undefined ? bottom-inset : dividerYs[0]-inset;
+        const attributesBottom=dividerYs[1]===undefined ? bottom-inset : dividerYs[1]-inset;
+        boxes.push({x:g.x+inset,y:top+inset,width:g.right-g.x-inset*2,height:bottom-top-inset*2,
+            // Metadata only: retained for the opt-in OCR diagnostic view.
+            outerX:g.x,outerY:top,outerWidth:g.right-g.x,outerHeight:bottom-top,dividerYs,headerBottom,attributesBottom,dividerPadding:inset});
     }
-    return boxes.sort((a,b)=>a.y-b.y||a.x-b.x);
+    // A large UML box can contain glyphs or small closed shapes.  They are not
+    // independent classes, even when their strokes accidentally satisfy the
+    // rectangle heuristic.
+    return boxes.sort((a,b)=>b.width*b.height-a.width*a.height).filter((box,index,all)=>
+        !all.slice(0,index).some(outer=>box.x>=outer.x&&box.y>=outer.y&&box.x+box.width<=outer.x+outer.width&&box.y+box.height<=outer.y+outer.height)
+    ).sort((a,b)=>a.y-b.y||a.x-b.x);
 }
 // Candidate connections only: crossings and arrow semantics require review.
 function detectPhotoConnections(image, boxes, markers = []) {
@@ -305,6 +362,180 @@ function straightenPhotoCanvas(canvas) {
     ctx.translate(result.width/2,result.height/2);ctx.rotate(radians);ctx.drawImage(canvas,-canvas.width/2,-canvas.height/2);
     return result;
 }
+// OCR needs text, not the rectangle and compartment rules that surround it.
+// Keep this browser-only so the web and Android WebView use the same pipeline.
+function photoOtsuThreshold(gray) {
+    const histogram=new Uint32Array(256);let sum=0,total=gray.length;
+    for(const value of gray){histogram[value]++;sum+=value;}
+    let sumBackground=0,weightBackground=0,best=-1,threshold=175;
+    for(let i=0;i<256;i++){
+        weightBackground+=histogram[i];if(!weightBackground)continue;
+        const weightForeground=total-weightBackground;if(!weightForeground)break;
+        sumBackground+=i*histogram[i];
+        const meanBackground=sumBackground/weightBackground,meanForeground=(sum-sumBackground)/weightForeground;
+        const variance=weightBackground*weightForeground*(meanBackground-meanForeground)**2;
+        if(variance>best){best=variance;threshold=i;}
+    }
+    return Math.max(80,Math.min(220,threshold));
+}
+function removePhotoRuleLines(image) {
+    const {width,height,data}=image,black=(x,y)=>data[(y*width+x)*4]<128;
+    const erase=[];
+    // A UML divider spans most of its compartment.  Short '-' characters and
+    // operation punctuation are deliberately below these limits.
+    const horizontal=Math.max(42,Math.round(width*.55));
+    for(let y=0;y<height;y++){
+        let start=-1;
+        for(let x=0;x<=width;x++){
+            if(x<width&&black(x,y)){if(start<0)start=x;continue;}
+            if(start>=0&&x-start>=horizontal)erase.push([start,y,x-1,y]);
+            start=-1;
+        }
+    }
+    const vertical=Math.max(42,Math.round(height*.78));
+    for(let x=0;x<width;x++){
+        let start=-1;
+        for(let y=0;y<=height;y++){
+            if(y<height&&black(x,y)){if(start<0)start=y;continue;}
+            if(start>=0&&y-start>=vertical)erase.push([x,start,x,y-1]);
+            start=-1;
+        }
+    }
+    for(const [x1,y1,x2,y2] of erase)for(let y=y1;y<=y2;y++)for(let x=x1;x<=x2;x++){
+        const i=(y*width+x)*4;data[i]=data[i+1]=data[i+2]=255;
+    }
+    return image;
+}
+function binarizePhotoOcrCanvas(source) {
+    const canvas=document.createElement('canvas');canvas.width=source.width;canvas.height=source.height;
+    const ctx=canvas.getContext('2d');ctx.drawImage(source,0,0);
+    const pixels=ctx.getImageData(0,0,canvas.width,canvas.height),gray=new Uint8Array(canvas.width*canvas.height);
+    for(let p=0;p<gray.length;p++){
+        const i=p*4;gray[p]=Math.round(.2126*pixels.data[i]+.7152*pixels.data[i+1]+.0722*pixels.data[i+2]);
+    }
+    const threshold=photoOtsuThreshold(gray);
+    for(let p=0;p<gray.length;p++){
+        const i=p*4,value=gray[p]<threshold?0:255;pixels.data[i]=pixels.data[i+1]=pixels.data[i+2]=value;pixels.data[i+3]=255;
+    }
+    ctx.putImageData(pixels,0,0);return canvas;
+}
+function removePhotoRulesFromCanvas(canvas) {
+    const ctx=canvas.getContext('2d');const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+    removePhotoRuleLines(pixels);ctx.putImageData(pixels,0,0);return canvas;
+}
+function preparePhotoOcrCanvas(source) {
+    return removePhotoRulesFromCanvas(binarizePhotoOcrCanvas(source));
+}
+function photoOcrDebugEnabled() {
+    try{return new URLSearchParams(window.location.search).get('ocrDebug')==='1';}catch{return false;}
+}
+function addPhotoOcrDiagnostic(diagnostics,stage,details={}) {
+    if(diagnostics)diagnostics.push({stage,...details});
+}
+function addPhotoOcrDiagnosticImage(diagnostics,stage,canvas,details={}) {
+    if(diagnostics)addPhotoOcrDiagnostic(diagnostics,stage,{...details,width:canvas.width,height:canvas.height,image:canvas.toDataURL('image/png')});
+}
+// Kept separate from the recognizer so diagnostics stay opt-in and never send
+// an image or OCR result off the device.
+function renderPhotoOcrDiagnostics(diagnostics,container) {
+    if(!diagnostics?.length||!container)return;
+    container.querySelector('#photoOcrDiagnostics')?.remove();
+    const details=document.createElement('details');details.id='photoOcrDiagnostics';details.open=true;
+    const summary=document.createElement('summary');summary.textContent='Diagnóstico OCR local (solo esta sesión)';details.append(summary);
+    for(const item of diagnostics){
+        const section=document.createElement('section');section.style.cssText='margin:10px 0;padding:8px;border:1px solid #bbb;';
+        const heading=document.createElement('strong');heading.textContent=item.stage;section.append(heading);
+        const meta={...item};delete meta.stage;delete meta.image;
+        if(Object.keys(meta).length){const pre=document.createElement('pre');pre.style.whiteSpace='pre-wrap';pre.textContent=JSON.stringify(meta,null,2);section.append(pre);}
+        if(item.image){const image=document.createElement('img');image.src=item.image;image.alt=item.stage;image.style.cssText='display:block;max-width:100%;border:1px solid #777;background:white;';section.append(image);}
+        details.append(section);
+    }
+    container.append(details);
+}
+function photoTextBands(canvas) {
+    const {width,height,data}=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);
+    const rows=[];const minimum=Math.max(2,Math.round(width*.002));
+    for(let y=0;y<height;y++){
+        let ink=0;for(let x=0;x<width;x++)if(data[(y*width+x)*4]<128)ink++;
+        if(ink>=minimum)rows.push(y);
+    }
+    const bands=[];
+    for(const row of rows){
+        const last=bands[bands.length-1];
+        if(last&&row-last.bottom<=7)last.bottom=row;else bands.push({top:row,bottom:row});
+    }
+    return bands.filter(b=>b.bottom-b.top>=7).map(b=>{
+        let left=width,right=-1;
+        for(let y=b.top;y<=b.bottom;y++)for(let x=0;x<width;x++)if(data[(y*width+x)*4]<128){left=Math.min(left,x);right=Math.max(right,x);}
+        const pad=8,x=Math.max(0,left-pad),y=Math.max(0,b.top-pad),w=Math.min(width-x,right-left+1+pad*2),h=Math.min(height-y,b.bottom-b.top+1+pad*2);
+        return {x,y,width:w,height:h};
+    }).filter(b=>b.width>0&&b.height>0);
+}
+function photoEditDistance(a,b) {
+    const previous=Array.from({length:b.length+1},(_,i)=>i);
+    for(let i=0;i<a.length;i++){
+        const current=[i+1];for(let j=0;j<b.length;j++)current.push(Math.min(current[j]+1,previous[j+1]+1,previous[j]+(a[i]===b[j]?0:1)));
+        previous.splice(0,previous.length,...current);
+    }
+    return previous[b.length];
+}
+function normalizePhotoType(raw) {
+    const value=raw.replace(/[^A-Za-z0-9_\[\]]/g,'');if(!value)return '';
+    const array=value.endsWith('[]'),base=array?value.slice(0,-2):value;
+    const known=['String','Integer','Double','Boolean','LocalDate','Long','void'];
+    const exact=known.find(type=>type.toLowerCase()===base.toLowerCase());
+    const corrected=exact||known.find(type=>photoEditDistance(base.toLowerCase(),type.toLowerCase())===1);
+    return (corrected||base)+(array?'[]':'');
+}
+function normalizePhotoOcrText(text, kind='body') {
+    const chunks=String(text||'').replace(/\r/g,'').split('\n').flatMap(line=>line.split(/(?=\s[+\-#~]\s*[A-Za-z_])/));
+    const kept=[];
+    for(let line of chunks){
+        line=line.trim().replace(/[|│┌┐└┘├┤─]+/g,'').replace(/([A-Za-z])!+(?=\s|$)/g,'$1').trim();if(!line)continue;
+        if(kind==='name'){
+            if(/^[A-Za-z_][A-Za-z0-9_ ]*$/.test(line))kept.push(line.replace(/\s+/g,' '));
+            continue;
+        }
+        const operation=line.match(/^([+\-#~])?\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(([^()]*)\)\s*(?::\s*([A-Za-z][A-Za-z0-9_\[\]]*))?$/);
+        if(operation){kept.push(`${operation[1]||'+'}${operation[2]}(${operation[3].trim()})${operation[4]?`: ${normalizePhotoType(operation[4])||operation[4]}`:''}`);continue;}
+        // OCR can leave a border fragment after an otherwise valid member.
+        // Keep the UML core (name + first type token) rather than rejecting a
+        // complete attribute because of that unrelated trailing fragment.
+        const attribute=line.match(/^\s*[\[\]{}|]*\s*([+\-#~])?\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z][A-Za-z0-9_\[\]]*)(?:\s+.*)?$/);
+        if(attribute){const type=normalizePhotoType(attribute[3]);if(type)kept.push(`${attribute[1]||'-'}${attribute[2]}: ${type}`);}
+    }
+    return kept.join('\n');
+}
+function normalizePhotoLooseMember(raw) {
+    // Used only for a non-header OCR band that has already failed the strict
+    // UML grammar. Cameras can erase '-' and ':' while leaving a reliable
+    // identifier and type token. Operations contain parentheses and do not
+    // match this narrow two-token fallback.
+    const line=String(raw||'').trim().replace(/^[\[\]{}|_\s]+/,'').replace(/[\[\]{}|\s]+$/,'');
+    const match=line.match(/^([+\-#~])?\s*([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z][A-Za-z0-9_\[\]]*)$/);
+    if(!match)return '';
+    const type=normalizePhotoType(match[3]);
+    return type?`${match[1]||'-'}${match[2]}: ${type}`:'';
+}
+function normalizePhotoBandReadings(readings, kind='body') {
+    if(kind!=='mixed')return normalizePhotoOcrText(readings.join('\n'),kind);
+    let name='',members=[];
+    for(const raw of readings){
+        if(!name){const candidate=normalizePhotoOcrText(raw,'name');if(candidate){name=candidate.replace(/\n/g,' ').trim();continue;}}
+        const member=normalizePhotoOcrText(raw,'body')||normalizePhotoLooseMember(raw);if(member)members.push(member);
+    }
+    return {name,body:members.join('\n')};
+}
+function countStructuredPhotoBlocks(text) {
+    const identifier=/^[\p{L}_][\p{L}\p{N}_ ]*$/u;
+    const attribute=/^[+\-#~]?\s*[\p{L}_][\p{L}\p{N}_]*\s*:\s*[\p{L}_][\p{L}\p{N}_]*(?:\[\])?$/u;
+    const operation=/^[+\-#~]?\s*[\p{L}_][\p{L}\p{N}_]*\s*\([^()]*\)\s*(?::\s*[\p{L}_][\p{L}\p{N}_]*(?:\[\])?)?$/u;
+    return String(text||'').trim().split(/\n\s*\n/).filter(Boolean).filter(block=>{
+        const lines=block.split('\n').map(line=>line.trim()).filter(Boolean);
+        if(lines.length<2||!identifier.test(lines[0]))return false;
+        return lines.slice(1).every(line=>attribute.test(line)||operation.test(line));
+    }).length;
+}
 async function photoCanvas(file) {
     const bitmap=await createImageBitmap(file);
     const canvas=document.createElement('canvas');
@@ -354,34 +585,96 @@ async function recognizeLocalPhoto(file) {
     });
     try {
         const canvas=await photoCanvas(file);
+        const diagnostics=photoOcrDebugEnabled()?[]:null;
+        addPhotoOcrDiagnosticImage(diagnostics,'00. Imagen tras escala y enderezado',canvas);
         const boxes=detectPhotoBoxes(canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height));
+        addPhotoOcrDiagnostic(diagnostics,'01. Cajas y compartimentos detectados',{boxes:boxes.map((box,index)=>({index:index+1,outer:{x:box.outerX,y:box.outerY,width:box.outerWidth,height:box.outerHeight},inner:{x:box.x,y:box.y,width:box.width,height:box.height},headerBottom:box.headerBottom,attributesBottom:box.attributesBottom,dividerYs:box.dividerYs}))});
         if(!boxes.length) {
-            const result=await worker.recognize(canvas);
-            return {text:result.data.text,structured:false,count:0};
+            // A clean digital export may omit UML rectangles.  It still gets
+            // the same line-level preprocessing instead of raw full-page OCR.
+            const prepared=preparePhotoOcrCanvas(canvas),bands=photoTextBands(prepared);
+            await worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_+-#~:(),.[]* /',preserve_interword_spaces:'1'});
+            const readings=[];
+            for(const band of bands.length?bands:[{x:0,y:0,width:prepared.width,height:prepared.height}]){
+                const line=document.createElement('canvas');line.width=band.width;line.height=band.height;
+                line.getContext('2d').drawImage(prepared,band.x,band.y,band.width,band.height,0,0,band.width,band.height);
+                readings.push((await worker.recognize(line)).data.text);
+            }
+            const first=normalizePhotoOcrText(readings.shift()||'','name');
+            const body=normalizePhotoOcrText(readings.join('\n'),'body');
+            const text=[first,body].filter(Boolean).join('\n');
+            const count=countStructuredPhotoBlocks(text);
+            addPhotoOcrDiagnostic(diagnostics,'Resultado final sin cajas',{raw:readings.join('\n'),name:first,body,text});
+            return {text,structured:count>0,count,diagnostics};
         }
-        await worker.setParameters({tessedit_pageseg_mode:'6'});
+        const whitelist='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_+-#~:(),.[]* /';
         const blocks=[], names=[];
-        const read=async(box,top,bottom)=>{
-            const crop=document.createElement('canvas');crop.width=box.width*3;crop.height=Math.max(1,bottom-top)*3;
-            const ctx=crop.getContext('2d');ctx.drawImage(canvas,box.x,top,box.width,Math.max(1,bottom-top),0,0,crop.width,crop.height);
-            const pixels=ctx.getImageData(0,0,crop.width,crop.height);
-            for(let i=0;i<pixels.data.length;i+=4){const v=pixels.data[i]+pixels.data[i+1]+pixels.data[i+2]<420?0:255;pixels.data[i]=pixels.data[i+1]=pixels.data[i+2]=v;}
-            ctx.putImageData(pixels,0,0);
-            return (await worker.recognize(crop)).data.text.trim();
+        const cropCanvas=(source,x,y,width,height,scale=1)=>{
+            const crop=document.createElement('canvas');crop.width=Math.max(1,Math.round(width*scale));crop.height=Math.max(1,Math.round(height*scale));
+            crop.getContext('2d').drawImage(source,x,y,width,height,0,0,crop.width,crop.height);return crop;
+        };
+        const read=async(box,top,bottom,kind,label)=>{
+            const height=Math.max(1,bottom-top);
+            const interior=cropCanvas(canvas,box.x,top,box.width,height);
+            addPhotoOcrDiagnosticImage(diagnostics,`${label}. 03. Recorte interior tras margen`,interior,{bounds:{x:box.x,y:top,width:box.width,height}});
+            const crop=cropCanvas(canvas,box.x,top,box.width,height,3);
+            addPhotoOcrDiagnosticImage(diagnostics,`${label}. 04. Recorte escalado x3`,crop);
+            const binarized=binarizePhotoOcrCanvas(crop);
+            addPhotoOcrDiagnosticImage(diagnostics,`${label}. 05. Binarización Otsu`,binarized);
+            const prepared=removePhotoRulesFromCanvas(binarized);
+            addPhotoOcrDiagnosticImage(diagnostics,`${label}. 06. Después de eliminar reglas`,prepared);
+            const bands=photoTextBands(prepared);
+            addPhotoOcrDiagnostic(diagnostics,`${label}. 07. Bandas de texto`,{bands});
+            await worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:whitelist,preserve_interword_spaces:'1'});
+            const readings=[];
+            for(const [index,band] of (bands.length?bands:[{x:0,y:0,width:prepared.width,height:prepared.height}]).entries()){
+                const line=document.createElement('canvas');line.width=band.width;line.height=band.height;
+                line.getContext('2d').drawImage(prepared,band.x,band.y,band.width,band.height,0,0,band.width,band.height);
+                addPhotoOcrDiagnosticImage(diagnostics,`${label}. 08. Imagen enviada a Tesseract, banda ${index+1}`,line,{band});
+                let raw=(await worker.recognize(line)).data.text;
+                // A single-line mode can return nothing for small handwritten
+                // or low-contrast bands. Try the sparse-line mode only then.
+                if(!raw.trim()){
+                    await worker.setParameters({tessedit_pageseg_mode:'13',tessedit_char_whitelist:whitelist,preserve_interword_spaces:'1'});
+                    const alternate=(await worker.recognize(line)).data.text;
+                    addPhotoOcrDiagnostic(diagnostics,`${label}. 09b. Tesseract alternativo, banda ${index+1}`,{raw:alternate});
+                    if(alternate.trim())raw=alternate;
+                    await worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:whitelist,preserve_interword_spaces:'1'});
+                }
+                readings.push(raw);
+                addPhotoOcrDiagnostic(diagnostics,`${label}. 09. Tesseract bruto, banda ${index+1}`,{raw});
+            }
+            const normalized=normalizePhotoBandReadings(readings,kind);
+            addPhotoOcrDiagnostic(diagnostics,`${label}. 10. Después de sanitize/filter`,{raw:readings.join('\n'),normalized});
+            return normalized;
         };
         for(let i=0;i<boxes.length;i++) {
             update(`Leyendo clase ${i+1} de ${boxes.length}…`,25+70*i/boxes.length);
             const box=boxes[i];
-            const name=await read(box,box.y,box.headerBottom);
-            const attrs=await read(box,box.headerBottom+9,box.attributesBottom);
-            const methods=box.y+box.height>box.attributesBottom+10 ? await read(box,box.attributesBottom+9,box.y+box.height) : '';
+            const outer=cropCanvas(canvas,box.outerX,box.outerY,box.outerWidth,box.outerHeight);
+            addPhotoOcrDiagnosticImage(diagnostics,`Clase ${i+1}. 02. Recorte original de caja antes de limpieza`,outer,{bounds:{x:box.outerX,y:box.outerY,width:box.outerWidth,height:box.outerHeight}});
+            const dividerGap=Math.max(2,(box.dividerPadding||3)*2);
+            let name='',attrs='',methods='';
+            if(!box.dividerYs.length){
+                // Divider lines may be faint or broken in a photograph. The
+                // text bands are still ordered top-to-bottom, so use them as a
+                // semantic fallback without inventing geometric separators.
+                const fallback=await read(box,box.y,box.y+box.height,'mixed',`Clase ${i+1}, bandas sin divisor`);
+                name=fallback.name;attrs=fallback.body;
+            } else {
+                name=await read(box,box.y,box.headerBottom,'name',`Clase ${i+1}, nombre`);
+                attrs=box.attributesBottom>box.headerBottom+dividerGap ? await read(box,box.headerBottom+dividerGap,box.attributesBottom,'body',`Clase ${i+1}, atributos`) : '';
+                methods=box.y+box.height>box.attributesBottom+dividerGap ? await read(box,box.attributesBottom+dividerGap,box.y+box.height,'body',`Clase ${i+1}, operaciones`) : '';
+            }
             names.push(name.replace(/\n/g,' ').trim());
             if(name)blocks.push(name.replace(/\n/g,' ')+'\n'+(attrs+'\n'+methods).split('\n').map(line=>line.trim()).filter(Boolean).join('\n'));
         }
         update('Lectura terminada; revisa las clases antes de importar.',100);
         const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);
         const markers=detectPhotoMarkers(pixels,boxes);
-        return {text:blocks.join('\n\n'),structured:true,count:blocks.length,names,markers,...detectPhotoConnections(pixels,boxes,markers)};
+        const text=blocks.join('\n\n');
+        addPhotoOcrDiagnostic(diagnostics,'11. Texto final ensamblado',{text,names,blocks});
+        return {text,structured:true,count:blocks.length,names,markers,diagnostics,...detectPhotoConnections(pixels,boxes,markers)};
     } finally {
         await worker.terminate();
     }

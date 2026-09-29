@@ -1070,18 +1070,20 @@ body.mobile-editor {
 /* ─── Visual Canvas 2D (Collapsible) ─────────────────────────────────────── */
 .mobile-editor #mainLayout {
     display: none;
-    height: 380px;
+    /* Keep the canvas usable on a phone while allowing its complete diagram
+       to be reached with the normal page scroll. */
+    height: min(70vh, 620px);
     min-height: 280px;
     margin: 0 auto 30px;
     max-width: 640px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 18px;
-    overflow: hidden;
+    overflow: auto;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
 }
 
 .mobile-editor #mainLayout.visible {
-    display: block;
+    display: flex;
 }
 
 /* ─── Modern Bottom Sheet Modal Dialog ───────────────────────────────────── */
