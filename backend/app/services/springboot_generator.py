@@ -1171,7 +1171,13 @@ logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
 """
 
     def _get_ordered_classes(self) -> list[UMLClass]:
-        """Return classes sorted topologically so parents appear before children."""
+        """Return classes ordered so referenced tables are created first.
+
+        Besides inheritance, the SQL schema contains foreign keys for UML
+        associations.  The owning side of each relation must therefore be
+        emitted after the class it references; this also lets the generated
+        ``schema.sql`` run against H2 during local development.
+        """
         classes = [c for c in self.diagram.classes if not c.is_interface]
         class_map = {c.id: c for c in classes}
 
@@ -1179,6 +1185,41 @@ logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
         for c in classes:
             parent_classes = self.diagram.get_parent_classes(c.id)
             parents_map[c.id] = [p.id for p in parent_classes if p.id in class_map]
+
+        # Add the SQL foreign-key dependencies induced by relationships.
+        # ``parents_map[owner]`` means "create this referenced table first".
+        for rel in self.diagram.relationships:
+            if rel.type in (
+                RelationshipType.GENERALIZATION,
+                RelationshipType.REALIZATION,
+                RelationshipType.DEPENDENCY,
+            ):
+                continue
+
+            source_id = rel.source.class_id
+            target_id = rel.target.class_id
+            if source_id not in class_map or target_id not in class_map:
+                continue
+
+            source_many = rel.source.multiplicity in ("*", "0..*", "1..*")
+            target_many = rel.target.multiplicity in ("*", "0..*", "1..*")
+
+            if rel.type in (RelationshipType.COMPOSITION, RelationshipType.AGGREGATION):
+                # The destination table owns the FK to the composite/whole.
+                owner_id, referenced_id = target_id, source_id
+            elif not source_many and not target_many:
+                # For 1:1 associations the source owns the FK.
+                owner_id, referenced_id = source_id, target_id
+            elif target_many and not source_many:
+                owner_id, referenced_id = target_id, source_id
+            elif source_many and not target_many:
+                owner_id, referenced_id = source_id, target_id
+            else:
+                # Many-to-many uses a join table generated after all classes.
+                continue
+
+            if referenced_id not in parents_map[owner_id]:
+                parents_map[owner_id].append(referenced_id)
 
         ordered = []
         visited = set()

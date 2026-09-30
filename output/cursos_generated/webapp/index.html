@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CursosDemo - Sistema de gestión de cursos e instructores">
+    <title>CursosDemo | Gestión de Cursos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+    <!-- Splash / Loading Screen -->
+    <div id="splash" class="splash">
+        <div class="splash-content">
+            <div class="splash-icon">
+                <span class="material-icons-round">school</span>
+            </div>
+            <h1 class="splash-title">CursosDemo</h1>
+            <p class="splash-subtitle">Cargando sistema...</p>
+            <div class="splash-loader">
+                <div class="splash-loader-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Shell -->
+    <div id="app" class="app hidden">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <span class="material-icons-round">school</span>
+                    <span class="sidebar-logo-text">CursosDemo</span>
+                </div>
+                <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
+                    <span class="material-icons-round">menu</span>
+                </button>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-page="dashboard" id="nav-dashboard">
+                    <span class="material-icons-round">dashboard</span>
+                    <span class="nav-label">Dashboard</span>
+                </a>
+                <a href="#" class="nav-item" data-page="instructores" id="nav-instructores">
+                    <span class="material-icons-round">person</span>
+                    <span class="nav-label">Instructores</span>
+                </a>
+                <a href="#" class="nav-item" data-page="cursos" id="nav-cursos">
+                    <span class="material-icons-round">menu_book</span>
+                    <span class="nav-label">Cursos</span>
+                </a>
+                <div class="nav-divider"></div>
+                <a href="#" class="nav-item" data-page="api" id="nav-api">
+                    <span class="material-icons-round">code</span>
+                    <span class="nav-label">API Explorer</span>
+                </a>
+                <a href="#" class="nav-item" data-page="about" id="nav-about">
+                    <span class="material-icons-round">info</span>
+                    <span class="nav-label">Acerca de</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="sidebar-status">
+                    <span class="status-dot online"></span>
+                    <span class="nav-label">Servidor en línea</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main id="main-content" class="main-content">
+            <!-- Top Bar -->
+            <header class="topbar">
+                <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="Menu">
+                    <span class="material-icons-round">menu</span>
+                </button>
+                <h2 id="page-title" class="topbar-title">Dashboard</h2>
+                <div class="topbar-actions">
+                    <button id="theme-toggle" class="icon-btn" title="Cambiar tema" aria-label="Toggle theme">
+                        <span class="material-icons-round">dark_mode</span>
+                    </button>
+                    <button id="notif-btn" class="icon-btn" title="Notificaciones" aria-label="Notifications">
+                        <span class="material-icons-round">notifications_none</span>
+                        <span class="notif-badge" id="notif-badge">0</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Page Container -->
+            <div id="page-container" class="page-container">
+                <!-- Dashboard Page -->
+                <section id="page-dashboard" class="page active">
+                    <div class="dashboard-grid">
+                        <!-- Stats Cards -->
+                        <div class="stat-card stat-instructors" id="stat-instructors">
+                            <div class="stat-icon">
+                                <span class="material-icons-round">person</span>
+                            </div>
+                            <div class="stat-info">
+                                <span class="stat-number" id="count-instructors">0</span>
+                                <span class="stat-label">Instructores</span>
+                            </div>
+                            <div class="stat-trend up">
+                                <span class="material-icons-round">trending_up</span>
+                            </div>
+                        </div>
+                        <div class="stat-card stat-courses" id="stat-courses">
+                            <div class="stat-icon">
+                                <span class="material-icons-round">menu_book</span>
+                            </div>
+                            <div class="stat-info">
+                                <span class="stat-number" id="count-courses">0</span>
+                                <span class="stat-label">Cursos</span>
+                            </div>
+                            <div class="stat-trend up">
+                                <span class="material-icons-round">trending_up</span>
+                            </div>
+                        </div>
+                        <div class="stat-card stat-active" id="stat-active">
+                            <div class="stat-icon">
+                                <span class="material-icons-round">check_circle</span>
+                            </div>
+                            <div class="stat-info">
+                                <span class="stat-number" id="count-active">0</span>
+                                <span class="stat-label">Cursos Activos</span>
+                            </div>
+                            <div class="stat-trend neutral">
+                                <span class="material-icons-round">remove</span>
+                            </div>
+                        </div>
+                        <div class="stat-card stat-api" id="stat-api">
+                            <div class="stat-icon">
+                                <span class="material-icons-round">api</span>
+                            </div>
+                            <div class="stat-info">
+                                <span class="stat-number">REST</span>
+                                <span class="stat-label">API Status</span>
+                            </div>
+                            <div class="stat-trend up">
+                                <span class="material-icons-round">check</span>
+                            </div>
+                        </div>
+
+                        <!-- Quick Actions -->
+                        <div class="dashboard-section quick-actions-section">
+                            <h3 class="section-title">Acciones Rápidas</h3>
+                            <div class="quick-actions">
+                                <button class="quick-action-btn" id="qa-add-instructor" title="Nuevo Instructor">
+                                    <span class="material-icons-round">person_add</span>
+                                    <span>Nuevo Instructor</span>
+                                </button>
+                                <button class="quick-action-btn" id="qa-add-curso" title="Nuevo Curso">
+                                    <span class="material-icons-round">add_circle</span>
+                                    <span>Nuevo Curso</span>
+                                </button>
+                                <button class="quick-action-btn" id="qa-export" title="Exportar Datos">
+                                    <span class="material-icons-round">download</span>
+                                    <span>Exportar</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Recent Activity -->
+                        <div class="dashboard-section activity-section">
+                            <h3 class="section-title">Actividad Reciente</h3>
+                            <div id="activity-list" class="activity-list">
+                                <div class="activity-empty">
+                                    <span class="material-icons-round">history</span>
+                                    <p>Sin actividad reciente</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Architecture Diagram -->
+                        <div class="dashboard-section architecture-section">
+                            <h3 class="section-title">Arquitectura del Sistema</h3>
+                            <div class="architecture-diagram">
+                                <div class="arch-layer arch-frontend">
+                                    <div class="arch-layer-title">Frontend Web</div>
+                                    <div class="arch-components">
+                                        <div class="arch-component">HTML/CSS/JS</div>
+                                        <div class="arch-component">REST Client</div>
+                                    </div>
+                                </div>
+                                <div class="arch-arrow">
+                                    <span class="material-icons-round">arrow_downward</span>
+                                    <span class="arch-arrow-label">HTTP/REST</span>
+                                    <span class="material-icons-round">arrow_upward</span>
+                                </div>
+                                <div class="arch-layer arch-backend">
+                                    <div class="arch-layer-title">Spring Boot Backend</div>
+                                    <div class="arch-components">
+                                        <div class="arch-component">Controllers</div>
+                                        <div class="arch-component">Services</div>
+                                        <div class="arch-component">Repositories</div>
+                                    </div>
+                                </div>
+                                <div class="arch-arrow">
+                                    <span class="material-icons-round">arrow_downward</span>
+                                    <span class="arch-arrow-label">JPA/Hibernate</span>
+                                    <span class="material-icons-round">arrow_upward</span>
+                                </div>
+                                <div class="arch-layer arch-db">
+                                    <div class="arch-layer-title">PostgreSQL</div>
+                                    <div class="arch-components">
+                                        <div class="arch-component">instructors</div>
+                                        <div class="arch-component">curso_programados</div>
+                                    </div>
+                                </div>
+                                <div class="arch-side">
+                                    <div class="arch-layer arch-mobile">
+                                        <div class="arch-layer-title">Flutter App</div>
+                                        <div class="arch-components">
+                                            <div class="arch-component">Material 3</div>
+                                            <div class="arch-component">HTTP Service</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Instructores Page -->
+                <section id="page-instructores" class="page">
+                    <div class="page-header">
+                        <div>
+                            <h3 class="page-header-title">Instructores</h3>
+                            <p class="page-header-subtitle">Gestión del catálogo de instructores</p>
+                        </div>
+                        <div class="page-header-actions">
+                            <div class="search-box" id="instructor-search-box">
+                                <span class="material-icons-round">search</span>
+                                <input type="text" id="instructor-search" placeholder="Buscar instructor..." aria-label="Buscar instructor">
+                            </div>
+                            <button class="btn btn-primary" id="btn-add-instructor">
+                                <span class="material-icons-round">add</span>
+                                Nuevo Instructor
+                            </button>
+                        </div>
+                    </div>
+                    <div class="data-table-wrapper">
+                        <table class="data-table" id="instructors-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Nombre</th>
+                                    <th>Cursos Asignados</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="instructors-tbody">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                        <div class="table-empty hidden" id="instructors-empty">
+                            <span class="material-icons-round">person_off</span>
+                            <p>No hay instructores registrados</p>
+                            <button class="btn btn-outline" id="btn-add-instructor-empty">Agregar instructor</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Cursos Page -->
+                <section id="page-cursos" class="page">
+                    <div class="page-header">
+                        <div>
+                            <h3 class="page-header-title">Cursos Programados</h3>
+                            <p class="page-header-subtitle">Gestión de cursos y programación</p>
+                        </div>
+                        <div class="page-header-actions">
+                            <div class="search-box" id="cursos-search-box">
+                                <span class="material-icons-round">search</span>
+                                <input type="text" id="cursos-search" placeholder="Buscar curso..." aria-label="Buscar curso">
+                            </div>
+                            <button class="btn btn-primary" id="btn-add-curso">
+                                <span class="material-icons-round">add</span>
+                                Nuevo Curso
+                            </button>
+                        </div>
+                    </div>
+                    <div class="data-table-wrapper">
+                        <table class="data-table" id="cursos-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Título</th>
+                                    <th>Fecha Inicio</th>
+                                    <th>Estado</th>
+                                    <th>Instructor</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cursos-tbody">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                        <div class="table-empty hidden" id="cursos-empty">
+                            <span class="material-icons-round">event_busy</span>
+                            <p>No hay cursos registrados</p>
+                            <button class="btn btn-outline" id="btn-add-curso-empty">Agregar curso</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- API Explorer Page -->
+                <section id="page-api" class="page">
+                    <div class="page-header">
+                        <div>
+                            <h3 class="page-header-title">API Explorer</h3>
+                            <p class="page-header-subtitle">Documentación interactiva de la API REST</p>
+                        </div>
+                    </div>
+                    <div class="api-explorer">
+                        <!-- Instructor Endpoints -->
+                        <div class="api-group">
+                            <h4 class="api-group-title">
+                                <span class="material-icons-round">person</span>
+                                Instructor
+                            </h4>
+                            <div class="api-endpoint" id="api-get-instructors">
+                                <span class="method-badge get">GET</span>
+                                <code>/api/instructors</code>
+                                <span class="api-desc">Listar todos los instructores</span>
+                                <button class="btn btn-sm btn-try" data-endpoint="GET /api/instructors">Probar</button>
+                            </div>
+                            <div class="api-endpoint" id="api-get-instructor">
+                                <span class="method-badge get">GET</span>
+                                <code>/api/instructors/{id}</code>
+                                <span class="api-desc">Obtener instructor por ID</span>
+                            </div>
+                            <div class="api-endpoint" id="api-post-instructor">
+                                <span class="method-badge post">POST</span>
+                                <code>/api/instructors</code>
+                                <span class="api-desc">Crear nuevo instructor</span>
+                            </div>
+                            <div class="api-endpoint" id="api-put-instructor">
+                                <span class="method-badge put">PUT</span>
+                                <code>/api/instructors/{id}</code>
+                                <span class="api-desc">Actualizar instructor</span>
+                            </div>
+                            <div class="api-endpoint" id="api-delete-instructor">
+                                <span class="method-badge delete">DELETE</span>
+                                <code>/api/instructors/{id}</code>
+                                <span class="api-desc">Eliminar instructor</span>
+                            </div>
+                        </div>
+
+                        <!-- CursoProgramado Endpoints -->
+                        <div class="api-group">
+                            <h4 class="api-group-title">
+                                <span class="material-icons-round">menu_book</span>
+                                CursoProgramado
+                            </h4>
+                            <div class="api-endpoint" id="api-get-cursos">
+                                <span class="method-badge get">GET</span>
+                                <code>/api/curso-programados</code>
+                                <span class="api-desc">Listar todos los cursos</span>
+                                <button class="btn btn-sm btn-try" data-endpoint="GET /api/curso-programados">Probar</button>
+                            </div>
+                            <div class="api-endpoint" id="api-get-curso">
+                                <span class="method-badge get">GET</span>
+                                <code>/api/curso-programados/{id}</code>
+                                <span class="api-desc">Obtener curso por ID</span>
+                            </div>
+                            <div class="api-endpoint" id="api-post-curso">
+                                <span class="method-badge post">POST</span>
+                                <code>/api/curso-programados</code>
+                                <span class="api-desc">Crear nuevo curso</span>
+                            </div>
+                            <div class="api-endpoint" id="api-put-curso">
+                                <span class="method-badge put">PUT</span>
+                                <code>/api/curso-programados/{id}</code>
+                                <span class="api-desc">Actualizar curso</span>
+                            </div>
+                            <div class="api-endpoint" id="api-delete-curso">
+                                <span class="method-badge delete">DELETE</span>
+                                <code>/api/curso-programados/{id}</code>
+                                <span class="api-desc">Eliminar curso</span>
+                            </div>
+                        </div>
+
+                        <!-- API Response Preview -->
+                        <div class="api-response-panel" id="api-response-panel">
+                            <div class="api-response-header">
+                                <span>Respuesta</span>
+                                <button class="icon-btn" id="api-response-close" aria-label="Close">
+                                    <span class="material-icons-round">close</span>
+                                </button>
+                            </div>
+                            <pre id="api-response-body" class="api-response-body"></pre>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- About Page -->
+                <section id="page-about" class="page">
+                    <div class="about-container">
+                        <div class="about-hero">
+                            <span class="material-icons-round about-hero-icon">auto_awesome</span>
+                            <h3>CursosDemo</h3>
+                            <p class="about-tagline">Generado automáticamente desde diagrama UML</p>
+                        </div>
+                        <div class="about-cards">
+                            <div class="about-card">
+                                <span class="material-icons-round">web</span>
+                                <h4>Aplicación Web</h4>
+                                <p>Frontend HTML/CSS/JS con diseño responsivo y tema oscuro. Consume la API REST generada.</p>
+                            </div>
+                            <div class="about-card">
+                                <span class="material-icons-round">dns</span>
+                                <h4>Spring Boot Backend</h4>
+                                <p>API REST con Spring Boot 3.x, JPA/Hibernate, DTOs, validación y Swagger.</p>
+                            </div>
+                            <div class="about-card">
+                                <span class="material-icons-round">phone_android</span>
+                                <h4>Flutter Mobile</h4>
+                                <p>App móvil Flutter 3.x con Material 3, caché offline y soporte de voz.</p>
+                            </div>
+                            <div class="about-card">
+                                <span class="material-icons-round">schema</span>
+                                <h4>Modelo UML</h4>
+                                <p>Basado en el diagrama de clases: Instructor (1) ── imparte ──▸ (0..*) CursoProgramado</p>
+                            </div>
+                        </div>
+                        <div class="about-tech">
+                            <h4>Stack Tecnológico</h4>
+                            <div class="tech-badges">
+                                <span class="tech-badge">Java 17</span>
+                                <span class="tech-badge">Spring Boot 3.x</span>
+                                <span class="tech-badge">PostgreSQL</span>
+                                <span class="tech-badge">JPA/Hibernate</span>
+                                <span class="tech-badge">Swagger/OpenAPI</span>
+                                <span class="tech-badge">Flutter 3.x</span>
+                                <span class="tech-badge">Dart</span>
+                                <span class="tech-badge">Material 3</span>
+                                <span class="tech-badge">HTML5</span>
+                                <span class="tech-badge">CSS3</span>
+                                <span class="tech-badge">JavaScript ES6+</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div id="modal" class="modal" role="dialog" aria-modal="true">
+            <div class="modal-header">
+                <h3 id="modal-title">Modal</h3>
+                <button class="icon-btn" id="modal-close" aria-label="Cerrar modal">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div id="modal-body" class="modal-body">
+                <!-- Dynamic form content -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" id="modal-cancel">Cancelar</button>
+                <button class="btn btn-primary" id="modal-save">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Confirm Dialog -->
+    <div id="confirm-overlay" class="modal-overlay hidden">
+        <div class="modal confirm-modal" role="alertdialog" aria-modal="true">
+            <div class="modal-header">
+                <h3 id="confirm-title">Confirmar</h3>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message">¿Está seguro?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" id="confirm-cancel">Cancelar</button>
+                <button class="btn btn-danger" id="confirm-ok">Eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

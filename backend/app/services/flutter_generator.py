@@ -214,6 +214,47 @@ class FlutterGenerator:
         scaffold = subprocess.run([flutter, "create", "--no-pub", "--platforms=web,android,ios", "--org", self.package_name, "--project-name", self.app_name, str(Path(output_dir).resolve())], capture_output=True, text=True, errors="replace", timeout=180)
         if scaffold.returncode:
             raise RuntimeError("No se pudo preparar Flutter: " + scaffold.stderr[-1000:])
+
+        # Flutter 3.19 scaffolds Gradle 7 / Android Gradle Plugin 7 projects.
+        # Those versions cannot run with the Java 21 runtime bundled by current
+        # Android Studio installations, preventing a generated app from being
+        # compiled into an APK.  Upgrade the Android build tooling after the
+        # scaffold is created so the generated project builds on current SDKs.
+        settings = Path(output_dir) / "android/settings.gradle"
+        if settings.exists():
+            settings_text = settings.read_text(encoding="utf-8")
+            settings_text = settings_text.replace(
+                'id "com.android.application" version "7.3.0" apply false',
+                'id "com.android.application" version "8.4.2" apply false',
+            ).replace(
+                'id "org.jetbrains.kotlin.android" version "1.7.10" apply false',
+                'id "org.jetbrains.kotlin.android" version "1.9.24" apply false',
+            )
+            settings.write_text(settings_text, encoding="utf-8")
+
+        wrapper = Path(output_dir) / "android/gradle/wrapper/gradle-wrapper.properties"
+        if wrapper.exists():
+            wrapper_text = wrapper.read_text(encoding="utf-8")
+            wrapper_text = wrapper_text.replace(
+                "gradle-7.6.3-all.zip", "gradle-8.6-all.zip"
+            )
+            wrapper.write_text(wrapper_text, encoding="utf-8")
+
+        # Voice input requires Android API 21 or above.  Pin the NDK requested
+        # by current Flutter plugins as well, so the generated APK has a
+        # reproducible Android toolchain configuration.
+        app_gradle = Path(output_dir) / "android/app/build.gradle"
+        if app_gradle.exists():
+            app_gradle_text = app_gradle.read_text(encoding="utf-8")
+            app_gradle_text = app_gradle_text.replace(
+                "ndkVersion flutter.ndkVersion",
+                'ndkVersion "26.1.10909125"',
+            ).replace(
+                "minSdkVersion flutter.minSdkVersion",
+                "minSdkVersion 21",
+            )
+            app_gradle.write_text(app_gradle_text, encoding="utf-8")
+
         manifest = Path(output_dir) / "android/app/src/main/AndroidManifest.xml"
         if manifest.exists():
             text = manifest.read_text(encoding="utf-8")
