@@ -1,4 +1,4 @@
-const SHELL='uml-shell-v22';
+const SHELL='uml-shell-v23';
 const FILES=[
     '/',
     '/index.html',

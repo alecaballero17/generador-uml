@@ -26,7 +26,7 @@ function driveBackupFile(diagram) {
     return {file, name:`${name}_${stamp}.json`};
 }
 
-async function uploadDiagramToDrive(backup, token) {
+async function uploadDiagramToDrive(backup, token, signal) {
     const boundary = 'uml_' + crypto.randomUUID();
     const metadata = {name:backup.name, mimeType:'application/json', description:'Respaldo editable de GeneradorUML. Para restaurarlo, descargá este JSON y usá Importar en el editor.'};
     const body = new Blob([
@@ -36,7 +36,8 @@ async function uploadDiagramToDrive(backup, token) {
         `\r\n--${boundary}--\r\n`
     ], {type:`multipart/related; boundary=${boundary}`});
     const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
-        method:'POST', headers:{Authorization:`Bearer ${token}`}, body, signal:AbortSignal.timeout(60000)
+        method:'POST', headers:{Authorization:`Bearer ${token}`}, body,
+        signal:signal ? AbortSignal.any([signal, AbortSignal.timeout(60000)]) : AbortSignal.timeout(60000)
     });
     if (!response.ok) {
         if (response.status === 401) throw new Error('La autorización venció. Volvé a conectar tu cuenta.');
@@ -62,12 +63,17 @@ async function showDriveBackup() {
     dialog.querySelector('.drive-backup-file').textContent = backup.name;
     document.body.append(dialog); dialog.showModal();
     const status = dialog.querySelector('.drive-status'), button=dialog.querySelector('#driveConnectSave');
-    let busy=false;
-    const close=()=>{if (!busy) {dialog.close();dialog.remove();}};
+    let generation=0, authTimer=null, uploadController=null;
+    const stop=()=>{
+        generation++; clearTimeout(authTimer); authTimer=null;
+        uploadController?.abort(); uploadController=null;
+    };
+    // Closing remains available even if Google never sends either callback.
+    const close=()=>{stop();dialog.close();dialog.remove();};
     dialog.querySelector('#driveBackupClose').onclick=close;
     dialog.addEventListener('cancel', event=>{event.preventDefault();close();});
     const report=(message,error=false)=>{status.textContent=message;status.dataset.error=String(error);};
-    const release=()=>{busy=false;button.disabled=false;dialog.querySelector('#driveBackupClose').disabled=false;};
+    const release=()=>{stop();button.disabled=false;button.textContent='Reintentar conexión con Google';};
     try {
         const response=await umlApiFetch('/api/integrations/google-drive',{cache:'no-store'});
         if (!response.ok) throw new Error('No se pudo consultar la conexión con Drive. Reintentá en unos segundos.');
@@ -75,31 +81,55 @@ async function showDriveBackup() {
         if (!config.configured) throw new Error('Google Drive todavía no está habilitado en esta instalación. Falta configurar la conexión con Google. Tu diagrama sigue guardado localmente.');
         await loadDriveIdentity();
         if (!dialog.isConnected) return;
-        const client=window.google.accounts.oauth2.initTokenClient({
-            client_id:config.clientId, scope:DRIVE_SCOPE, include_granted_scopes:false,
-            error_callback:()=>{release();report('No se completó la autorización. Permití la ventana de Google o reintentá.',true);},
-            callback:async result=>{
-                if (result.error || !result.access_token || !window.google.accounts.oauth2.hasGrantedAllScopes(result,DRIVE_SCOPE)) {
-                    release();report('No se concedió permiso para guardar en Drive. No se subió el respaldo.',true);return;
-                }
-                report('Guardando tu diagrama en Drive…');
-                try {
-                    const saved=await uploadDiagramToDrive(backup,result.access_token);
-                    report('✓ Respaldo guardado en tu Google Drive.');
-                    button.textContent='Guardado en Drive';
-                    busy=false;dialog.querySelector('#driveBackupClose').disabled=false;
-                    const link=document.createElement('a'); link.className='btn-secondary';
-                    link.textContent='Ver respaldo en Drive'; link.target='_blank';link.rel='noopener noreferrer';
-                    link.href='https://drive.google.com/file/d/'+encodeURIComponent(saved.id)+'/view';
-                    button.after(link);
-                } catch(error) {release();report(error.name==='TimeoutError'?'Google demoró en responder. Revisá tu Drive antes de reintentar.':error.message,true);}
-            }
-        });
         button.disabled=false;report('Listo para guardar. Google te pedirá elegir tu cuenta y autorizar el acceso.');
         button.onclick=()=>{
-            busy=true;button.disabled=true;dialog.querySelector('#driveBackupClose').disabled=true;
+            stop(); const attempt=generation;
+            const active=()=>dialog.isConnected && attempt===generation;
+            button.disabled=true;button.textContent='Esperando a Google…';
             report('Esperando tu autorización en Google…');
-            try { client.requestAccessToken({prompt:'select_account'}); }
+            authTimer=setTimeout(()=>{
+                if (!active()) return;
+                release();report('Google no devolvió la autorización. Cerrá la ventana anterior de Google y reintentá. Todavía no se envió el respaldo.',true);
+            },120000);
+            try {
+                // Separate callbacks per attempt prevent a late authorization
+                // from uploading after cancellation or starting a second upload.
+                const client=window.google.accounts.oauth2.initTokenClient({
+                    client_id:config.clientId, scope:DRIVE_SCOPE, include_granted_scopes:false,
+                    error_callback:error=>{
+                        if (!active()) return;
+                        release();
+                        report(error?.type==='popup_closed' ? 'Se cerró la ventana de Google. Podés reintentar o cerrar este panel.' : 'No se completó la autorización. Permití la ventana de Google o reintentá.',true);
+                    },
+                    callback:async result=>{
+                        if (!active()) return;
+                        clearTimeout(authTimer);authTimer=null;
+                        let expectedGeneration=attempt;
+                        try {
+                            if (result.error || !result.access_token || !window.google.accounts.oauth2.hasGrantedAllScopes(result,DRIVE_SCOPE)) {
+                                release();report('No se concedió permiso para guardar en Drive. No se subió el respaldo.',true);return;
+                            }
+                            // Consume this authorization before awaiting network I/O.
+                            generation++; const uploadGeneration=generation;expectedGeneration=generation;
+                            uploadController=new AbortController();
+                            report('Guardando tu diagrama en Drive…');button.textContent='Guardando en Drive…';
+                            const saved=await uploadDiagramToDrive(backup,result.access_token,uploadController.signal);
+                            if (!dialog.isConnected || uploadGeneration!==generation) return;
+                            uploadController=null;
+                            report('✓ Respaldo guardado en tu Google Drive.');
+                            button.textContent='Guardado en Drive';
+                            const link=document.createElement('a');link.className='btn-secondary';
+                            link.textContent='Ver respaldo en Drive';link.target='_blank';link.rel='noopener noreferrer';
+                            link.href='https://drive.google.com/file/d/'+encodeURIComponent(saved.id)+'/view';
+                            button.after(link);
+                        } catch(error) {
+                            if (!dialog.isConnected || expectedGeneration!==generation || error.name==='AbortError') return;
+                            release();report(error.name==='TimeoutError'?'Google demoró en responder. Revisá tu Drive antes de reintentar.':error.message,true);
+                        }
+                    }
+                });
+                client.requestAccessToken({prompt:'select_account'});
+            }
             catch (_) {release();report('No se pudo abrir Google. Permití las ventanas emergentes y reintentá.',true);}
         };
     } catch(error) { report(error.message,true); }
