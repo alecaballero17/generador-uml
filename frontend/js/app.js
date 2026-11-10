@@ -2348,11 +2348,13 @@ $$('.tab-btn').forEach(btn => {
 // Initialize
 // ═══════════════════════════════════════════════════════════════════════════
 
-function init() {
+async function init() {
+    const fresh = await chooseProjectStart();
+    if (fresh) state.projectId = crypto.randomUUID();
     // Check if previous project exists in localStorage
     try {
-        const shared = savedCollaboration();
-        const cached = shared ? JSON.stringify(shared.diagram) : (!new URLSearchParams(location.search).has('project') ? localStorage.getItem('generador_uml_current') : null);
+        const shared = fresh ? null : savedCollaboration();
+        const cached = fresh ? null : shared ? JSON.stringify(shared.diagram) : (!new URLSearchParams(location.search).has('project') ? localStorage.getItem('generador_uml_current') : null);
         if (cached) {
             const data = JSON.parse(cached);
             if (data && data.classes) {

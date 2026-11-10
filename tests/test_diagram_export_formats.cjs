@@ -39,7 +39,7 @@ const ctx = {
 vm.createContext(ctx);
 
 // Ejecutar clases y funciones antes de init()
-vm.runInContext(appCode.split('function init()')[0], ctx);
+vm.runInContext(appCode.split('async function init()')[0], ctx);
 
 // Construir un modelo con herencia, realización, composición, atributos y operaciones
 const testScript = `

@@ -31,6 +31,7 @@
                 <span>GeneradorUML</span>
             </div>
             <div class="topbar-divider"></div>
+            <button type="button" class="btn-secondary" id="btnProjectStart">Proyectos</button>
             <input type="text" id="projectName" class="project-name-input" value="Nuevo Diagrama" spellcheck="false">
         </div>
         <div class="topbar-center">
@@ -48,7 +49,7 @@
         <div class="topbar-right">
             <button class="btn-primary" id="btnShare">Compartir</button>
             <span id="collabStatus" class="collab-badge" title="Estado de sincronización en tiempo real">
-                <span class="status-dot online"></span> Conectado
+                Preparando sesión…
             </span>
             <div class="topbar-divider"></div>
             <button class="icon-btn" id="btnVoice" title="Entrada por voz">
@@ -871,9 +872,10 @@
     </dialog>
     <input type="file" id="importFileInput" accept=".json,.mdj,.xmi,.xml" class="hidden-input">
 
-    <script src="js/collaboration.js?v=20260920markers"></script>
+    <script src="js/project-start.js?v=20261110recovery"></script>
+    <script src="js/collaboration.js?v=20261110recovery"></script>
     <script src="js/uml-commands.js?v=20260920markers"></script>
-    <script src="js/app.js?v=20261108association-class"></script>
+    <script src="js/app.js?v=20261110recovery"></script>
     <script src="js/local-ai.js?v=20261108ocr-edge"></script>
     <script src="js/mobile.js?v=20261108association-class"></script>
     <script src="js/association-classes.js?v=20261108association-class"></script>

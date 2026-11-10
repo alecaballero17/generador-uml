@@ -201,7 +201,19 @@ async function initWebSocket() {
             const url=new URL(location.href); url.searchParams.set('project',state.projectId); url.hash=`access=${collaborationState.token}`;
             history.replaceState(null,'',url);
         }
-        collaborationState.ready=true;
+        // A transport opening is not proof that the old project still exists.
+        const accessCheck = await umlApiFetch(`/api/collaboration/${encodeURIComponent(state.projectId)}/revisions`, {
+            headers: {'Authorization': `Bearer ${collaborationState.token}`}
+        });
+        if (accessCheck.status === 403 || accessCheck.status === 404) {
+            collaborationState.ready=false;
+            syncBadge('Proyecto sin acceso · copia local conservada');
+            showProjectRecovery();
+            return;
+        }
+        if (!accessCheck.ok) throw new Error('Servidor no disponible');
+        collaborationState.ready=false;
+        syncBadge('Conectando al proyecto…');
         collaborationState.reconnectAttempts=0;
         restorePendingOffline();
         const isMobile = (location.host === 'appassets.androidplatform.net' || location.protocol === 'file:');
@@ -230,7 +242,8 @@ async function initWebSocket() {
         };
         state.ws.onclose=event=>{
             if (collaborationState.inflight) { savePendingOffline(); collaborationState.inflight=null; }
-            syncBadge(event.code===4403?'Enlace sin permiso':offlineSyncMessage());
+            syncBadge(event.code===4403?'Proyecto sin acceso · copia local conservada':offlineSyncMessage());
+            if (event.code===4403) { collaborationState.ready=false; showProjectRecovery(); }
             if (event.code!==4403) {
                 collaborationState.reconnectAttempts++;
                 const delay = Math.min(3000 * Math.pow(1.5, Math.min(collaborationState.reconnectAttempts, 8)), 30000);
@@ -239,6 +252,12 @@ async function initWebSocket() {
         };
         state.ws.onerror=()=>syncBadge(offlineSyncMessage());
     } catch(error) {
+        if (error.message==='Falta el enlace de acceso') {
+            collaborationState.ready=false;
+            syncBadge('Falta el enlace de acceso · copia local conservada');
+            showProjectRecovery();
+            return;
+        }
         collaborationState.ready=true;
         syncBadge(error.message==='Falta el enlace de acceso'?error.message:offlineSyncMessage());
         collaborationState.reconnect=setTimeout(initWebSocket,3000);
