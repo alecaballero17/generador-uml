@@ -1407,3 +1407,15 @@ dialog::backdrop { background: #0009; }
 .project-start-dialog h2 { margin: 0 0 16px; font-size: 26px; }
 .project-start-dialog p { color: #c3bdd3; line-height: 1.6; margin-bottom: 20px; }
 .project-start-dialog button { width: 100%; margin-top: 12px; padding: 14px; }
+.action-btn.drive-backup-button { padding: 13px 12px; gap: 10px; color: #e6fff4; background: linear-gradient(115deg,#173f3b,#253856); border: 1px solid #4a8d7c; border-radius: 12px; box-shadow: 0 5px 20px #0b42352b; }
+.drive-backup-button:hover { border-color: #82d7bb; filter: brightness(1.12); }
+.drive-backup-button span { text-align: left; font-weight: 600; }
+.drive-backup-button small { display: block; margin-top: 5px; color: #a8c9c2; font-size: 10px; font-weight: 400; }
+.drive-backup-dialog { width: min(500px,calc(100vw - 32px)); padding: 28px; border-radius: 24px; background: #171a27; border: 1px solid #426e65; box-shadow: 0 25px 90px #0008; }
+.drive-backup-dialog::backdrop { background: #090c16c9; backdrop-filter: blur(8px); }
+.drive-backup-dialog h2 { font-size: 26px; margin: 14px 0; }
+.drive-backup-dialog p { color: #bfc8d5; line-height: 1.6; }
+.drive-backup-file { border: 1px solid #384a55; background: #202d37; border-radius: 14px; padding: 18px; margin: 20px 0; overflow-wrap: anywhere; }
+.drive-backup-dialog button, .drive-backup-dialog a { display: flex; justify-content: center; align-items: center; width: 100%; margin-top: 12px; min-height: 44px; text-decoration: none; }
+.drive-backup-dialog .drive-status { min-height: 26px; color: #a9decc; }
+.drive-backup-dialog .drive-status[data-error="true"] { color: #ffb3bd; }

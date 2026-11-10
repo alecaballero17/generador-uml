@@ -1,4 +1,4 @@
-const SHELL='uml-shell-v21';
+const SHELL='uml-shell-v22';
 const FILES=[
     '/',
     '/index.html',
@@ -10,6 +10,7 @@ const FILES=[
     '/css/mobile.css',
     '/js/collaboration.js',
     '/js/project-start.js',
+    '/js/drive-backup.js',
     '/js/app.js',
     '/js/uml-commands.js',
     '/js/mobile.js',

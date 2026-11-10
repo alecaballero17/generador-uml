@@ -141,6 +141,15 @@ async def health_check():
     return {"status": "ok", "service": "GeneradorUML", "timestamp": datetime.now().isoformat()}
 
 
+@app.get('/api/integrations/google-drive')
+def google_drive_config():
+    """OAuth web client IDs are public; access tokens never pass through this API."""
+    client_id = os.environ.get('GOOGLE_DRIVE_CLIENT_ID', '').strip()
+    configured = bool(re.fullmatch(r'[A-Za-z0-9_-]+\.apps\.googleusercontent\.com', client_id))
+    return JSONResponse({'configured': configured, 'clientId': client_id if configured else ''},
+                        headers={'Cache-Control': 'no-store'})
+
+
 # ─── Diagram Validation ───────────────────────────────────────────────────
 
 @app.post("/api/validate")
