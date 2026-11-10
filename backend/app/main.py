@@ -16,11 +16,11 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .models.uml_model import (
     UMLDiagram, UMLClass, UMLAttribute, UMLOperation, UMLParameter,
@@ -35,6 +35,7 @@ from .services.xmi_adapter import XMIAdapter
 from .services.mdj_adapter import MDJAdapter
 from .services.photo_interpreter import PhotoInterpreter
 from .services.gemini_assistant import GeminiAssistant
+from .services.build_pipeline import BuildPipeline
 
 # ─── App Setup ─────────────────────────────────────────────────────────────
 
@@ -65,6 +66,19 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 OUTPUT_DIR = Path(os.environ.get("APP_DATA_DIR", str(BASE_DIR / "output"))).resolve()
 OUTPUT_DIR.mkdir(exist_ok=True)
 PROJECT_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,128}")
+build_pipeline = BuildPipeline(OUTPUT_DIR)
+
+
+def require_local_build(request: Request):
+    from urllib.parse import urlparse
+    if os.environ.get('UML_LOCAL_BUILD') != '1':
+        raise HTTPException(403, 'Compilación disponible al iniciar scripts/Start-Local.ps1 en tu computadora')
+    local = {'127.0.0.1', '::1', 'localhost', 'testclient'}
+    if not request.client or request.client.host not in local or request.url.hostname not in local:
+        raise HTTPException(403, 'La compilación solo se admite desde la computadora local')
+    origin = request.headers.get('origin')
+    if origin and (urlparse(origin).hostname != request.url.hostname or urlparse(origin).netloc != request.url.netloc):
+        raise HTTPException(403, 'Abre el editor desde el mismo servidor local')
 
 
 def validate_project_id(project_id: str) -> str:
@@ -107,7 +121,7 @@ class DiagramData(BaseModel):
 class GenerationRequest(BaseModel):
     """Request for code generation."""
     diagram: DiagramData
-    basePackage: str = "com.generated.app"
+    basePackage: str = Field(default="com.generated.app", pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
     generateFlutter: bool = True
     generatePostman: bool = True
 
@@ -139,6 +153,44 @@ async def validate_diagram(data: DiagramData):
 
 
 # ─── Code Generation ──────────────────────────────────────────────────────
+
+@app.post('/api/builds', status_code=202)
+def start_build(data: GenerationRequest, request: Request):
+    require_local_build(request)
+    diagram = UMLDiagram.from_dict(data.diagram.model_dump())
+    validation = UMLValidator(diagram).validate()
+    if not validation.is_valid or not diagram.classes:
+        raise HTTPException(400, validation.to_dict())
+    try:
+        job_id = build_pipeline.start(diagram, data.basePackage)
+        return {'id': job_id}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.get('/api/builds/{job_id}')
+def build_status(job_id: str, request: Request):
+    require_local_build(request)
+    try:
+        return build_pipeline.status(job_id)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(404, 'Compilación no encontrada') from exc
+
+
+@app.get('/api/builds/{job_id}/artifact/{kind}')
+def build_artifact(job_id: str, kind: str, request: Request):
+    require_local_build(request)
+    if kind not in {'apk', 'zip'}:
+        raise HTTPException(404, 'Archivo no encontrado')
+    try:
+        if build_pipeline.status(job_id)['state'] != 'succeeded':
+            raise HTTPException(409, 'La compilación aún no terminó correctamente')
+        filename = 'aplicacion.apk' if kind == 'apk' else 'entrega.zip'
+        return FileResponse(build_pipeline.directory(job_id) / filename, filename=filename)
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(404, 'Compilación no encontrada') from exc
 
 @app.post("/api/generate")
 async def generate_code(request: GenerationRequest):
@@ -462,7 +514,10 @@ async def export_xmi(data: DiagramData):
     """Export a diagram as XMI 2.1 (compatible with Enterprise Architect / StarUML)."""
     diagram = UMLDiagram.from_dict(data.model_dump())
     adapter = XMIAdapter()
-    xmi_content = adapter.export_to_xmi(diagram)
+    try:
+        xmi_content = adapter.export_to_xmi(diagram)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
     return JSONResponse(
         content={"xmi": xmi_content, "warnings": adapter.warnings},
         headers={
@@ -495,7 +550,10 @@ async def export_mdj(data: DiagramData):
     """Export a diagram as StarUML .mdj file."""
     diagram = UMLDiagram.from_dict(data.model_dump())
     adapter = MDJAdapter()
-    mdj_content = adapter.export_to_mdj(diagram)
+    try:
+        mdj_content = adapter.export_to_mdj(diagram)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
     return JSONResponse(
         content=json.loads(mdj_content),
         headers={
@@ -508,6 +566,19 @@ async def export_mdj(data: DiagramData):
 # ─── Photo / Whiteboard Interpretation ────────────────────────────────────
 
 MAX_PHOTO_SIZE = 15 * 1024 * 1024  # 15 MB
+
+@app.post('/api/photo/vision')
+async def interpret_photo_vision(file: UploadFile = File(...)):
+    from .services.photo_vision import interpret_with_vision
+    content = await file.read(MAX_PHOTO_SIZE + 1)
+    if not content or len(content) > MAX_PHOTO_SIZE:
+        raise HTTPException(400, 'Selecciona una imagen de hasta 15 MB.')
+    try:
+        return await interpret_with_vision(content)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception:
+        raise HTTPException(502, 'No se pudo interpretar la imagen con IA. Usa OCR local o reintenta.')
 
 @app.post("/api/photo/interpret")
 async def interpret_photo(file: UploadFile = File(...)):

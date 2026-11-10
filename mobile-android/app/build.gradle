@@ -1,4 +1,5 @@
 plugins { id 'com.android.application' }
+if (file('google-services.json').exists()) { apply plugin: 'com.google.gms.google-services' }
 android {
  namespace 'com.generadoruml.mobile'
  compileSdk 34
@@ -6,3 +7,4 @@ android {
  androidResources { noCompress 'onnx', 'wasm', 'gz' }
 }
 dependencies { implementation 'androidx.webkit:webkit:1.10.0' }
+dependencies { implementation platform('com.google.firebase:firebase-bom:33.7.0'); implementation 'com.google.firebase:firebase-messaging' }

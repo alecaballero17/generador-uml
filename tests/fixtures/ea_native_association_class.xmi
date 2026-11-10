@@ -1,0 +1,58 @@
+<!-- Reduced from lutaml/xmi spec/fixtures/full-242.xmi (EA export).
+Source: https://github.com/lutaml/xmi/blob/main/spec/fixtures/full-242.xmi
+Only the Role association class, its endpoints and connector metadata retained. -->
+<xmi:XMI xmlns:xmi="http://www.omg.org/spec/XMI/20110701" xmlns:uml="http://www.omg.org/spec/UML/20110701" xmi:version="2.4.2">
+  <uml:Model name="EA native association class excerpt">
+    <packagedElement xmi:type="uml:Class" xmi:id="EAID_E3826C4E_33AB_487d_B285_5508A77596BA" name="CityObjectGroup">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="EAID_dstE2DC87_AAA0_40e4_836A_2B17BC3D36BF" name="groupMember" association="EAID_0FC9537C_CCD5_413f_B8F5_D916C7C77DA1" aggregation="shared">
+        <type xmi:idref="EAID_B7DD64BA_C4AB_4607_9123_680D06F1C7C0" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_LI000594__AAA0_40e4_836A_2B17BC3D36BF" value="*" />
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:AssociationClass" xmi:id="EAID_0FC9537C_CCD5_413f_B8F5_D916C7C77DA1" name="Role">
+      <memberEnd xmi:idref="EAID_dstE2DC87_AAA0_40e4_836A_2B17BC3D36BF" />
+      <ownedAttribute xmi:type="uml:Property" xmi:id="EAID_860F03FD_EC04_4211_B6A8_89159DD06BF5" name="role">
+        <type xmi:idref="EAID_0A614EA9_13B7_4ebe_85ED_AA187D27CBD1" />
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_LI000595_EC04_4211_B6A8_89159DD06BF5" value="0" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_LI000596_EC04_4211_B6A8_89159DD06BF5" value="1" />
+      </ownedAttribute>
+      <memberEnd xmi:idref="EAID_srcE2DC87_AAA0_40e4_836A_2B17BC3D36BF" />
+      <ownedEnd xmi:type="uml:Property" xmi:id="EAID_srcE2DC87_AAA0_40e4_836A_2B17BC3D36BF" association="EAID_0FC9537C_CCD5_413f_B8F5_D916C7C77DA1">
+        <type xmi:idref="EAID_E3826C4E_33AB_487d_B285_5508A77596BA" />
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_LI000630__AAA0_40e4_836A_2B17BC3D36BF" value="*" />
+      </ownedEnd>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="EAID_B7DD64BA_C4AB_4607_9123_680D06F1C7C0" name="AbstractCityObject" isAbstract="true">
+					</packagedElement>
+  </uml:Model>
+  <xmi:Extension extender="Enterprise Architect">
+    <connectors>
+      <connector xmi:idref="EAID_ECE2DC87_AAA0_40e4_836A_2B17BC3D36BF">
+        <source xmi:idref="EAID_E3826C4E_33AB_487d_B285_5508A77596BA">
+          <model ea_localid="86" type="Class" name="CityObjectGroup" />
+          <role visibility="Public" targetScope="instance" />
+          <type multiplicity="*" aggregation="shared" containment="Unspecified" />
+          <constraints />
+          <modifiers isOrdered="false" changeable="none" isNavigable="false" />
+          <style value="Union=0;Derived=0;AllowDuplicates=0;Owned=0;Navigable=Unspecified;" />
+        </source>
+        <target xmi:idref="EAID_B7DD64BA_C4AB_4607_9123_680D06F1C7C0">
+          <model ea_localid="100" type="Class" name="AbstractCityObject" />
+          <role name="groupMember" stereotype="Property" visibility="Public" targetScope="instance" />
+          <type multiplicity="*" aggregation="none" containment="Unspecified" />
+          <constraints />
+          <modifiers isOrdered="false" changeable="none" isNavigable="true" />
+          <style value="Union=0;Derived=0;AllowDuplicates=0;Owned=0;Navigable=Navigable;" />
+        </target>
+        <model ea_localid="9212" />
+        <properties ea_type="Association" subtype="Class" direction="Source -&gt; Destination" />
+        <modifiers isRoot="false" isLeaf="false" />
+        <parameterSubstitutions />
+        <appearance linemode="3" linecolor="-1" linewidth="0" seqno="0" headStyle="0" lineStyle="0" />
+        <labels lb="*" rb="*" rt="+groupMember&#10;«Property»" />
+        <extendedProperties associationclass="EAID_0FC9537C_CCD5_413f_B8F5_D916C7C77DA1" privatedata1="7782" />
+        <style />
+      </connector>
+    </connectors>
+  </xmi:Extension>
+</xmi:XMI>

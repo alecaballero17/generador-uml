@@ -306,6 +306,11 @@ class UMLValidator:
     def _validate_relationships(self):
         """Validate all relationships in the diagram."""
         class_ids = {c.id for c in self.diagram.classes}
+        from .association_classes import normalize_association_classes
+        try:
+            normalize_association_classes(self.diagram)
+        except ValueError as error:
+            self.result.add_error(str(error), rule='associationClass.invalid')
 
         for rel in self.diagram.relationships:
             # Source class must exist
@@ -438,6 +443,8 @@ class UMLValidator:
         for rel in self.diagram.relationships:
             connected_ids.add(rel.source.class_id)
             connected_ids.add(rel.target.class_id)
+            if rel.association_class_id:
+                connected_ids.add(rel.association_class_id)
 
         for cls in self.diagram.classes:
             if cls.id not in connected_ids and len(self.diagram.classes) > 1:

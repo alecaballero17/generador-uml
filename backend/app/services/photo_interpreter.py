@@ -14,7 +14,7 @@ import uuid
 from typing import Optional, Dict, List, Tuple, Any
 from dataclasses import dataclass, field
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 
 try:
     import cv2
@@ -138,7 +138,7 @@ class PhotoInterpreter:
         self.review_notes = []
         self.warnings = []
 
-        pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        pil_img = ImageOps.exif_transpose(Image.open(io.BytesIO(image_bytes))).convert("RGB")
         img_np = np.array(pil_img)
 
         return self.interpret_numpy_image(img_np)
@@ -178,6 +178,7 @@ class PhotoInterpreter:
         skew_angle = self._estimate_deskew_angle(normalized_gray)
         if abs(skew_angle) >= 0.8:
             normalized_gray = self._deskew_image(normalized_gray, skew_angle)
+            gray = self._deskew_image(gray, skew_angle)
             if len(img_bgr_or_rgb.shape) == 3:
                 img_bgr_or_rgb = self._deskew_image(img_bgr_or_rgb, skew_angle)
         blurred = cv2.GaussianBlur(normalized_gray, (5, 5), 0)

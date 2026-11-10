@@ -420,6 +420,11 @@ const ConversationalAssistant = (function() {
             return;
         }
 
+        if (window.TeamAssistant && collaborationState.token) {
+            window.TeamAssistant.request(cleaned);
+            updateOrbState('ready', 'Solicitud preparada en el chat del equipo.');
+            return;
+        }
         if (isBusy) {updateOrbState('thinking','Estoy procesando el pedido anterior; tu texto sigue en el campo.');return false;}
         isBusy = true;
         updateOrbState('thinking', '✨ Gemini está razonando tu modelo...');
@@ -575,6 +580,15 @@ const ConversationalAssistant = (function() {
     }
 
     return {
+        previewActions(actions) {
+            if (!Array.isArray(actions) || actions.length > 100) throw new Error('Propuesta inválida');
+            const original = state.model;
+            state.model = UMLModel.fromJSON(original.toJSON());
+            try {
+                for (const action of actions) executeAction(action);
+                return state.model.toJSON();
+            } finally { state.model = original; }
+        },
         isBusy:()=>isBusy,
         speak,
         stopSpeaking,

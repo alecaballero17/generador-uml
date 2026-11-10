@@ -1,0 +1,31 @@
+const fs = require('fs'), vm = require('vm'), assert = require('node:assert/strict');
+const nodes = new Map(), storage = new Map(); let retry;
+function element() { return {textContent:'',disabled:false,dataset:{},children:[],attrs:{},classList:{add(){},remove(){}},append(...items){this.children.push(...items)},replaceChildren(...items){this.children=items},setAttribute(k,v){this.attrs[k]=v},removeAttribute(k){delete this.attrs[k]},addEventListener(name,fn){this[name]=fn}}; }
+const context = { $:id=>{if(!nodes.has(id))nodes.set(id,element());return nodes.get(id)},document:{createElement:element,createTextNode:text=>({textContent:text})},localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},setTimeout:fn=>{retry=fn;return 1},clearTimeout(){},umlApiFetch:async()=>{throw Error('sin conexion')}};
+vm.createContext(context);
+const source=fs.readFileSync('frontend/js/app.js','utf8');
+vm.runInContext(source.slice(source.indexOf('let apkPollTimer;'),source.indexOf("$('#btnBuildApk').addEventListener('click'")),context);
+(async()=>{
+ const id='a'.repeat(32); storage.set('uml-active-build',id);
+ context.renderApkBuild({state:'running',stage:'Compilando APK Android',message:'Compilando'});
+ assert.equal(context.$('#apkBuildProgress').value,4);
+ assert.equal(context.$('#btnBuildApk').disabled,true);
+ await context.watchApkBuild(id);
+ assert.equal(storage.get('uml-active-build'),id,'Conserva la compilacion si se pierde la conexion');
+ assert.equal(context.$('#btnBuildApk').disabled,true,'No permite duplicar un trabajo de estado desconocido');
+ assert.equal(typeof retry,'function');
+ context.umlApiFetch=async()=>({ok:true,json:async()=>({state:'succeeded',stage:'Completado',message:'OK'})});
+ await retry();
+ assert.equal(context.$('#apkBuildProgress').value,6);
+ assert.equal(context.$('#btnBuildApk').disabled,false);
+ assert.equal(storage.get('uml-last-build'),id,'Permite recuperar la entrega terminada');
+ const links=context.$('#apkBuildDownloads').children;
+ assert.equal(links.length,2); assert(links[0].href.includes(id));
+ links[0].click();
+ assert.match(context.$('#apkDownloadStatus').textContent,/solicitada/);
+ assert.match(context.$('#apkDownloadStatus').textContent,/requiere instalaci/);
+ context.renderApkBuild({state:'failed',message:'Error de compilador'});
+ assert.equal(context.$('#btnBuildApk').disabled,false);
+ assert.match(context.$('#apkBuildHint').textContent,/no est/);
+ console.log('APK: progreso por etapas, reconexion al mismo trabajo, resultado recuperable y descarga sin afirmar instalacion: OK.');
+})().catch(error=>{console.error(error);process.exitCode=1});

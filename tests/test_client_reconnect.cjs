@@ -3,7 +3,7 @@ const source=fs.readFileSync('frontend/js/collaboration.js','utf8');
 const clone=x=>JSON.parse(JSON.stringify(x));
 const base={name:'Prueba',classes:[{id:'a',name:'Usuario',attributes:[],position:{x:0,y:0}}],relationships:[]};
 let model=clone(base),sent=[],conflict=null;
-const ctx={state:{model:{toJSON:()=>clone(model)},ws:{readyState:1,send:value=>sent.push(JSON.parse(value))}},WebSocket:{OPEN:1},persistCollaboration(){},syncBadge(){},applySharedDiagram:value=>model=clone(value),showCollaborationConflict:(...args)=>conflict=args};
+const ctx={state:{model:{toJSON:()=>clone(model)},ws:{readyState:1,send:value=>sent.push(JSON.parse(value))}},WebSocket:{OPEN:1},localStorage:{getItem:()=>null},persistCollaboration(){},syncBadge(){},applySharedDiagram:value=>model=clone(value),showCollaborationConflict:(...args)=>conflict=args};
 vm.createContext(ctx);
 vm.runInContext(source.slice(source.indexOf('const collaborationState ='),source.indexOf('function syncBadge(')),ctx);
 vm.runInContext(source.slice(source.indexOf('function handleSharedSnapshot('),source.indexOf('function showCollaborationConflict(')),ctx);

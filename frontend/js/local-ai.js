@@ -224,7 +224,9 @@ function detectPhotoBoxes(image) {
             // A photographed rule can contain a short white break from glare,
             // antialiasing or a pen lift. Keep one candidate span while the
             // gap remains small relative to the whole source image.
-            if(start>=0&&x-lastInk<=horizontalGap)continue;
+            // At the image edge, flush the final span even when the trailing
+            // margin is shorter than the tolerated gap inside a broken rule.
+            if(x<w&&start>=0&&x-lastInk<=horizontalGap)continue;
             if(start>=0&&lastInk-start+1>=Math.max(55,w*.045)) {
                 const right=lastInk+1;
                 let group=groups.find(g=>Math.abs(g.x-start)<=endpointTolerance&&Math.abs(g.right-right)<=endpointTolerance);
@@ -545,11 +547,26 @@ async function photoCanvas(file) {
     return straightenPhotoCanvas(canvas);
 }
 async function recognizeLocalPhoto(file) {
+    const mobile = document.body.classList.contains('mobile-editor');
+    if (document.getElementById(mobile ? 'mobilePhotoUseVision' : 'photoUseVision')?.checked) {
+        aiStatus('Interpretando fotografía con IA en línea…');
+        const form = new FormData(); form.append('file', file);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 130000);
+        try {
+            const response = await umlApiFetch('/api/photo/vision', {method:'POST', body:form, signal:controller.signal});
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.detail || 'No se pudo interpretar la imagen');
+            aiStatus('Lectura IA terminada. Revisa clases, tipos y conexiones.');
+            return result;
+        } finally { clearTimeout(timer); }
+    }
     const statusEl = document.getElementById('mobilePhotoStatus');
     const progBar = document.getElementById('mobilePhotoProgressBar');
     const progBox = document.getElementById('mobilePhotoProgress');
     const update = (msg, pct = null) => {
         aiStatus(msg);
+        if (!mobile && typeof setPhotoReadProgress === 'function') setPhotoReadProgress(msg);
         if (statusEl) statusEl.textContent = msg;
         if (progBox && progBar) {
             if (pct !== null) {
@@ -579,7 +596,8 @@ async function recognizeLocalPhoto(file) {
         logger:m=>{
             if(m.status) {
                 const pct = Math.round((m.progress||0)*100);
-                update(`Foto: ${m.status} (${pct}%)`, Math.max(25, pct));
+                const labels = {'loading tesseract core':'Preparando el motor de lectura…', 'initializing tesseract':'Iniciando el lector…', 'loading language traineddata':'Cargando el idioma…', 'initializing api':'Preparando el reconocimiento…', 'recognizing text':'Reconociendo texto de la imagen…'};
+                update(mobile ? `Foto: ${m.status} (${pct}%)` : labels[m.status] || 'Procesando la imagen…', Math.max(25, pct));
             }
         }
     });

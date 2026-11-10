@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import uuid
 from ..models.uml_model import UMLDiagram, UMLClass, UMLAttribute
+from .rest_contract import relation_specs, attributes
+from .springboot_generator import SpringBootGenerator
 from .springboot_generator import to_pascal_case, to_camel_case, to_snake_case, pluralize, get_java_type
 
 
@@ -59,7 +61,8 @@ class PostmanGenerator:
 
     def __init__(self, diagram: UMLDiagram, base_url: str = "{{baseUrl}}",
                  port: str = "8080"):
-        self.diagram = diagram
+        from ..models.association_classes import normalize_association_classes
+        self.diagram = normalize_association_classes(diagram)
         self.base_url = base_url
         self.port = port
 
@@ -82,11 +85,24 @@ class PostmanGenerator:
         # Health check request
         collection["item"].append(self._generate_health_request())
 
-        for cls in self.diagram.classes:
+        generator = SpringBootGenerator(self.diagram)
+        classes = [c for c in generator._get_ordered_classes() if not c.is_abstract]
+        deletes = []
+        for cls in classes:
             if cls.is_interface:
                 continue
             folder = self._generate_entity_folder(cls)
+            name = to_pascal_case(cls.name)
+            collection['variable'].extend([
+                {'key': name + 'Id', 'value': '', 'type': 'string'},
+                {'key': name + 'Version', 'value': '0', 'type': 'string'},
+            ])
+            delete = next(item for item in folder['item'] if item['request']['method'] == 'DELETE')
+            folder['item'].remove(delete)
+            deletes.insert(0, delete)
             collection["item"].append(folder)
+
+        collection['item'].append({'name': 'Limpieza (orden inverso de dependencias)', 'item': deletes})
 
         return collection
 
@@ -133,25 +149,47 @@ class PostmanGenerator:
         path = to_snake_case(pluralize(cls.name)).replace("_", "-")
         sample_body = self._generate_sample_body(cls)
 
-        return {
+        folder = {
             "name": class_name,
             "item": [
+                self._create_request(class_name, path, sample_body),
                 self._get_all_request(class_name, path),
                 self._get_by_id_request(class_name, path),
-                self._create_request(class_name, path, sample_body),
-                self._update_request(class_name, path, sample_body),
+                self._update_request(class_name, path, dict(sample_body, version='{{' + class_name + 'Version}}')),
                 self._delete_request(class_name, path),
                 self._count_request(class_name, path),
             ]
         }
+        for item in folder['item']:
+            request = item['request']
+            if request['url']['path'][-1] == '1':
+                ref = '{{' + class_name + 'Id}}'
+                request['url']['path'][-1] = ref
+                request['url']['raw'] = request['url']['raw'][:-1] + ref
+            if 'body' in request:
+                # IDs and versions are JSON numbers, not quoted strings.
+                import re
+                request['body']['raw'] = re.sub(r'"(\{\{\w+\}\})"', r'\1', request['body']['raw'])
+            if request['method'] in ('POST', 'PUT'):
+                item['event'][0]['script']['exec'].extend([
+                    'if (pm.response.code === 200 || pm.response.code === 201) {',
+                    f"  pm.collectionVariables.set('{class_name}Id', pm.response.json().id);",
+                    f"  pm.collectionVariables.set('{class_name}Version', pm.response.json().version);",
+                    '}',
+                ])
+        return folder
 
     def _generate_sample_body(self, cls: UMLClass) -> dict:
         """Generate a sample request body for POST/PUT."""
         body = {}
-        for attr in cls.attributes:
+        for attr in attributes(self.diagram, cls):
             if attr.name.lower() == "id":
                 continue
             body[to_camel_case(attr.name)] = _generate_sample_value(attr.type, attr.name)
+        for spec in relation_specs(SpringBootGenerator(self.diagram), cls):
+            if spec['owner']:
+                ref = '{{' + to_pascal_case(spec['target']) + 'Id}}'
+                body[spec['key']] = [ref] if spec['many'] else ref
         return body
 
     def _get_all_request(self, class_name: str, path: str) -> dict:

@@ -1,0 +1,16 @@
+{
+  "name": "VentasDefensa",
+  "classes": [
+    {"id":"venta","name":"Venta","position":{"x":350,"y":50},"attributes":[{"name":"fecha","type":"LocalDate","constraints":["required"]}]},
+    {"id":"vendedor","name":"Vendedor","position":{"x":30,"y":50},"attributes":[{"name":"nombre","type":"String","constraints":["required"]},{"name":"comision","type":"Double"}]},
+    {"id":"producto","name":"Producto","position":{"x":680,"y":50},"attributes":[{"name":"nombre","type":"String","constraints":["required"]},{"name":"precio","type":"Double"},{"name":"stock","type":"Integer"}]},
+    {"id":"detalle","name":"Detalle","position":{"x":680,"y":310},"attributes":[{"name":"cantidad","type":"Integer","constraints":["required"]},{"name":"precioUnitario","type":"Double","constraints":["required"]}]},
+    {"id":"cliente","name":"Cliente","position":{"x":350,"y":310},"attributes":[{"name":"nombre","type":"String","constraints":["required"]},{"name":"email","type":"String"}]}
+  ],
+  "relationships": [
+    {"id":"vendedor_venta","type":"association","source":{"classId":"vendedor","multiplicity":"1"},"target":{"classId":"venta","multiplicity":"0..*"}},
+    {"id":"cliente_venta","type":"association","source":{"classId":"cliente","multiplicity":"1"},"target":{"classId":"venta","multiplicity":"0..*"}},
+    {"id":"venta_detalle","type":"association","source":{"classId":"venta","multiplicity":"1"},"target":{"classId":"detalle","multiplicity":"1..*"}},
+    {"id":"producto_detalle","type":"association","source":{"classId":"producto","multiplicity":"1"},"target":{"classId":"detalle","multiplicity":"0..*"}}
+  ]
+}

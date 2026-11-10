@@ -11,6 +11,24 @@ line(140,75,180,77);line(178,75,180,175);line(180,173,230,175); // connector mus
 const boxes=ctx.detectPhotoBoxes({width,height,data});assert.equal(boxes.length,2);assert.ok(boxes.every(b=>b.headerBottom>b.y&&b.attributesBottom>b.headerBottom));
 console.log('Photo segmentation: blank image and connected class boxes passed');
 
+// The final horizontal run must be closed at the image boundary, even when
+// its right margin is shorter than the tolerance for gaps inside a rule.
+for (const margin of [0, 2, 15, 30]) {
+    const w=1000,h=500,pixels=new Uint8ClampedArray(w*h*4).fill(255);
+    const ink=(x,y)=>{const i=(y*w+x)*4;pixels[i]=pixels[i+1]=pixels[i+2]=0;};
+    const segment=(x1,y1,x2,y2)=>{for(let y=y1;y<=y2;y++)for(let x=x1;x<=x2;x++)ink(x,y);};
+    const starts=[20,360,999-margin-230];
+    for(const x of starts){
+        for(const y of [100,150,240,320])segment(x,y,x+230,y+2);
+        segment(x,100,x+2,322);segment(x+228,100,x+230,322);
+    }
+    segment(starts[0]+230,200,starts[1],202);
+    segment(starts[1]+230,200,starts[2],202);
+    const found=ctx.detectPhotoBoxes({width:w,height:h,data:pixels});
+    assert.equal(found.length,3,`all three classes must survive a ${margin}px right margin`);
+    assert.equal(ctx.detectPhotoConnections({width:w,height:h,data:pixels},found).connections.length,2);
+}
+
 const links=ctx.detectPhotoConnections({width,height,data},boxes);assert.equal(links.connections.length,1);assert.equal(links.ambiguous.length,0);
 const hints=ctx.detectPhotoConnections({width,height,data},boxes,[{kind:'hollowDiamond',box:0,x:145,y:75}]);
 assert.equal(hints.suggestions.length,1);assert.equal(hints.suggestions[0].source,0);assert.equal(hints.suggestions[0].target,1);assert.equal(hints.suggestions[0].type,'aggregation');

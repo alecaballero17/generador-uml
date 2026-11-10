@@ -297,6 +297,8 @@ class MDJAdapter:
 
     def export_to_mdj(self, diagram: UMLDiagram) -> str:
         """Export a diagram to StarUML .mdj format."""
+        if any(r.association_class_id for r in diagram.relationships):
+            raise ValueError('MDJ todavía no conserva clases de asociación. Guarda JSON o exporta PlantUML para conservar esta notación.')
         self.warnings = []
 
         project = {

@@ -170,7 +170,7 @@ function broadcastChange() {
     if (sameDiagram(diagram,collaborationState.base)) return;
     collaborationState.inflight=diagram;
     try {
-        state.ws.send(JSON.stringify({type:'update',revision:collaborationState.revision,diagram}));
+        state.ws.send(JSON.stringify({type:'update',revision:collaborationState.revision,diagram,actor:localStorage.getItem('uml-team-name') || 'Integrante'}));
         syncBadge('Guardando cambios…');
     } catch(error) {
         collaborationState.inflight=null;
@@ -209,9 +209,10 @@ async function initWebSocket() {
         const wsHost = backendUrl.host;
         const protocol = backendUrl.protocol==='https:' ? 'wss:' : 'ws:';
         state.ws=new WebSocket(`${protocol}//${wsHost}/ws/collaboration/${encodeURIComponent(state.projectId)}`);
-        state.ws.onopen=()=>{ state.ws.send(JSON.stringify({token:collaborationState.token})); };
+        state.ws.onopen=()=>{ state.ws.send(JSON.stringify({token:collaborationState.token,actor:localStorage.getItem('uml-team-name') || 'Integrante'})); window.dispatchEvent(new Event('team-connected')); };
         state.ws.onmessage=event=>{
             const msg=JSON.parse(event.data);
+            if(msg.type==='team_event'){window.dispatchEvent(new CustomEvent('team-event',{detail:msg.event}));return;}
             if (msg.role) collaborationState.role=msg.role;
             collaborationState.ready=true;
             if (msg.type==='snapshot' || msg.type==='ack') {
@@ -320,7 +321,7 @@ async function showShareDialog() {
         });
         if (!response.ok) { showToast('No se pudo crear el enlace', 'error'); return; }
         const invite = await response.json();
-        const url = new URL('/', umlBackendOrigin());
+        const url = new URL(role === 'viewer' ? '/seguimiento.html' : '/', umlBackendOrigin());
         url.searchParams.set('project', state.projectId);
         url.hash = `access=${invite.token}`;
         const out = dialog.querySelector('#inviteOutput');

@@ -520,18 +520,9 @@ function initMobileEditor() {
     relationButton.onclick=openMobileRelationship;
     document.getElementById('mobileClasses').before(relationButton);
 
-    const forced = new URLSearchParams(location.search).get('view') === 'mobile';
-    if (forced || matchMedia('(max-width: 760px)').matches) {
-        document.body.classList.add('mobile-editor');
-    }
-
-    const modeBtn = $('#mobileMode');
-    if (modeBtn) {
-        modeBtn.addEventListener('click', () => {
-            document.body.classList.toggle('mobile-editor');
-            refreshMobileCards();
-        });
-    }
+    // The editor is the sole web workspace. The generated and monitoring APKs
+    // cover phone use; a narrow browser must not silently replace the canvas.
+    document.body.classList.remove('mobile-editor');
 
     // Top Quick Action Cards
     const btnQuickCreate = document.getElementById('btnQuickCreate');
@@ -694,7 +685,7 @@ function initMobileEditor() {
             renderPhotoConnections(rawText);
             $('#mobilePhotoReview').hidden = false;
             renderPhotoOcrDiagnostics(rawText.diagnostics, document.getElementById('mobilePhotoReview'));
-            if (status) status.textContent = rawText.structured ? `Se separaron ${rawText.count} clases para revisar. Los tipos no indicados se importan como texto. Revisa también los métodos. Las relaciones todavía deben añadirse manualmente.` : 'No se pudieron separar las clases. El texto es una lectura sin verificar: corrígelo antes de importar.';
+            if (status) status.textContent = rawText.structured ? `Se separaron ${rawText.count} clases para revisar. Revisa tipos y métodos. Confirma las conexiones propuestas después de importar. ${(rawText.warnings || []).join(' ')}` : 'No se pudieron separar las clases. El texto es una lectura sin verificar: corrígelo antes de importar.';
         } catch (e) {
             if (status) status.textContent = 'Error al leer imagen: ' + e.message;
             aiStatus(e.message);
@@ -760,16 +751,20 @@ function openMobileRelationship(candidate = null) {
     if(collaborationState.role==='viewer'){showToast('Este proyecto es de solo lectura','warning');return;}
     if(!state.model.classes.length){showToast('Crea primero una clase','info');return;}
     const dialog=document.createElement('dialog');
-    dialog.innerHTML=`<form><h2>Conectar clases</h2><p>En herencia, el origen es la clase hija y el destino es la clase padre.</p>
+    dialog.className='photo-relationship-editor';
+    dialog.innerHTML=`<form><h2>Conectar clases</h2><p id="relationshipHelp">En herencia, el origen es la clase hija y el destino es la clase padre.</p>
     <div style="display:flex;justify-content:flex-end;margin-bottom:6px;"><button type="button" id="btnSwapDirection" class="btn" style="font-size:12px;padding:4px 10px;cursor:pointer;">⇄ Invertir origen y destino</button></div>
     <label>Clase de origen<select name="source"></select></label>
     <label>Clase de destino<select name="target"></select></label>
     <label>Relación<select name="type"><option value="association">Asociación</option><option value="generalization">Herencia</option><option value="aggregation">Agregación</option><option value="composition">Composición</option><option value="dependency">Dependencia</option><option value="realization">Implementa interfaz</option></select></label>
-    <label>Multiplicidad de origen<select name="sourceMult"><option value="">Sin especificar</option><option>1</option><option>0..1</option><option>0..*</option><option>1..*</option></select></label>
-    <label>Multiplicidad de destino<select name="targetMult"><option value="">Sin especificar</option><option>0..*</option><option>1</option><option>0..1</option><option>1..*</option></select></label>
+    <label>Multiplicidad de origen<select name="sourceMult"><option value="">Sin especificar</option><option>*</option><option>1</option><option>0..1</option><option>0..*</option><option>1..*</option></select></label>
+    <label>Multiplicidad de destino<select name="targetMult"><option value="">Sin especificar</option><option>*</option><option>0..*</option><option>1</option><option>0..1</option><option>1..*</option></select></label>
+    <label>Clase de asociación (opcional)<select name="associationClass"><option value="">Sin clase de asociación</option></select></label>
+    <p>Para muchos a muchos, vincula la clase intermedia. Aparecerá unida a esta asociación con una línea discontinua.</p>
+    <p id="associationConversionNotice"></p>
     <p role="alert"></p><button type="button" id="btnCancelRel">Cancelar</button><button type="submit" class="btn-primary">Guardar relación</button></form>`;
     const form=dialog.querySelector('form');
-    for(const cls of state.model.classes)for(const name of ['source','target']){
+    for(const cls of state.model.classes)for(const name of ['source','target','associationClass']){
         const option=document.createElement('option');option.value=cls.id;option.textContent=cls.name;form.elements[name].append(option);
     }
     if(state.model.classes.length>1)form.elements.target.selectedIndex=1;
@@ -783,7 +778,10 @@ function openMobileRelationship(candidate = null) {
         form.elements.target.value=candidate.target;
         if(candidate.type)form.elements.type.value=candidate.type;
     }
-    const updateMultiplicity=()=>{const enabled=['association','aggregation','composition'].includes(form.elements.type.value);form.elements.sourceMult.disabled=!enabled;form.elements.targetMult.disabled=!enabled;};
+    form.elements.associationClass.value=candidate?.associationClassId || '';
+    if(candidate?.associationClassId){dialog.querySelector('h2').textContent='Clase de asociación';dialog.querySelector('#relationshipHelp').textContent='Las clases principales se unen de muchos a muchos. La clase intermedia conserva los datos de esa relación.';}
+    if(candidate?.replaceRelationshipIds?.length)dialog.querySelector('#associationConversionNotice').textContent='Al guardar se reemplazarán los dos vínculos de la clase intermedia por una asociación muchos a muchos. Sus campos se conservan. Puedes deshacer el cambio.';
+    const updateMultiplicity=()=>{const enabled=['association','aggregation','composition'].includes(form.elements.type.value);form.elements.sourceMult.disabled=!enabled;form.elements.targetMult.disabled=!enabled;form.elements.associationClass.disabled=form.elements.type.value!=='association';};
     form.elements.type.onchange=updateMultiplicity;updateMultiplicity();
     dialog.querySelector('#btnSwapDirection').onclick=()=>{
         const prevSource = form.elements.source.value;
@@ -803,11 +801,26 @@ function openMobileRelationship(candidate = null) {
                 if(reachesSource(target))throw new Error('Esta herencia crearía un ciclo.');
             }
             if(type==='realization'&&!state.model.getClass(target).isInterface)throw new Error('El destino debe ser una interfaz.');
+            const associationClassId=type==='association' ? form.elements.associationClass.value : '';
+            if(associationClassId){
+                const cls=state.model.getClass(associationClassId);
+                if(!cls||cls.isInterface||cls.isAbstract||[source,target].includes(associationClassId)||source===target)throw new Error('Elige una clase concreta distinta de ambos extremos.');
+                if(!['*','0..*','1..*'].includes(form.elements.sourceMult.value)||!['*','0..*','1..*'].includes(form.elements.targetMult.value))throw new Error('Selecciona muchos (*, 0..* o 1..*) en ambos extremos.');
+                if(state.model.relationships.some(r=>r.associationClassId===associationClassId))throw new Error('Esta clase ya está vinculada a otra asociación.');
+            }
+            const replacements=candidate?.replaceRelationshipIds || [];
+            if(replacements.length){
+                const current=associationClassCandidate(state.model,candidate.associationClassId);
+                if(!associationClassId||associationClassId!==candidate.associationClassId||!current||JSON.stringify([...current.replaceRelationshipIds].sort())!==JSON.stringify([...replacements].sort())||new Set([source,target]).size!==2||![source,target].every(id=>[current.source,current.target].includes(id)))throw new Error('Los vínculos cambiaron. Cancela y vuelve a preparar la conversión.');
+            }
             if(state.model.relationships.some(r=>r.type===type&&r.source.classId===source&&r.target.classId===target))throw new Error('Esta relación ya existe.');
             saveUndo();const relation=new UMLRelNode(type,source,target);
             const hasMultiplicity=['association','aggregation','composition'].includes(type);
             relation.source.multiplicity=hasMultiplicity ? form.elements.sourceMult.value || null : null;
             relation.target.multiplicity=hasMultiplicity ? form.elements.targetMult.value || null : null;
+            relation.associationClassId=associationClassId || null;
+            if(associationClassId){relation.source.navigable=false;relation.target.navigable=false;}
+            state.model.relationships=state.model.relationships.filter(r=>!replacements.includes(r.id));
             state.model.addRelationship(relation);renderAll();persistCollaboration();broadcastChange();refreshMobileCards();
             showToast('Relación guardada en el diagrama','success');dialog.close();dialog.remove();
         }catch(error){dialog.querySelector('[role=alert]').textContent=error.message;}
@@ -985,9 +998,10 @@ function renderPhotoConnections(result, container = null) {
             const typeLabels={aggregation:'agregación',composition:'composición',generalization:'herencia',realization:'realización'};
             label+=` — posible ${typeLabels[suggestion.type]||suggestion.type}`;
             if(suggestion.sourceMult||suggestion.targetMult) label+=` (${suggestion.sourceMult||'?'}..${suggestion.targetMult||'?'})`;
+            if(suggestion.associationClass!=null)label+=` · clase de asociación: ${result.names[suggestion.associationClass]}`;
         }
         button.textContent=label;
-        button.onclick=()=>{try{const source=find(suggestion?suggestion.source:pair[0]),target=find(suggestion?suggestion.target:pair[1]);if(!source||!target)throw new Error('Importa primero las clases o comprueba sus nombres.');openMobileRelationship({source:source.id,target:target.id,type:suggestion?.type,sourceMult:suggestion?.sourceMult,targetMult:suggestion?.targetMult});}catch(error){note.textContent=error.message;}};
+        button.onclick=()=>{try{const source=find(suggestion?suggestion.source:pair[0]),target=find(suggestion?suggestion.target:pair[1]);if(!source||!target)throw new Error('Importa primero las clases o comprueba sus nombres.');const linked=suggestion?.associationClass!=null?find(suggestion.associationClass):null;if(suggestion?.associationClass!=null&&!linked)throw new Error('No se encontró la clase de asociación. Revisa su nombre.');openMobileRelationship({source:source.id,target:target.id,type:suggestion?.type,sourceMult:suggestion?.sourceMult,targetMult:suggestion?.targetMult,associationClassId:linked?.id});}catch(error){note.textContent=error.message;}};
         wrapper.append(button);
         section.append(wrapper);
     }

@@ -183,16 +183,30 @@ class TestFlutterGenerator:
         cache = files["lib/services/offline_cache_service.dart"]
         assert "SharedPreferences" in cache
 
-    def test_pubspec_has_speech_to_text(self):
+    def test_standard_app_does_not_add_voice_dependencies(self):
         files = self.gen.generate_all()
         pubspec = files["pubspec.yaml"]
-        assert "speech_to_text" in pubspec
+        assert "speech_to_text" not in pubspec
 
-    def test_assistant_uses_real_speech(self):
+    def test_dashboard_contains_only_diagram_modules(self):
         files = self.gen.generate_all()
-        assistant = files["lib/screens/assistant_screen.dart"]
-        assert "speech_to_text" in assistant
-        assert "_simulateVoiceInput" not in assistant
+        dashboard = files["lib/screens/dashboard_screen.dart"]
+        assert "lib/screens/assistant_screen.dart" not in files
+        assert "AssistantScreen" not in dashboard
+        for cls in self.diagram.classes:
+            assert f"const {cls.name}ListScreen()" in dashboard
+            assert f"const {cls.name}FormScreen()" in dashboard
+        assert 'VentasDefensa' not in dashboard
+
+    def test_api_configuration_respects_generation_target(self):
+        files = FlutterGenerator(self.diagram, api_base_url='http://127.0.0.1:8087/api').generate_all()
+        assert 'static String baseUrl = "http://127.0.0.1:8087/api";' in files['lib/services/api_config.dart']
+
+    def test_generated_forms_keep_persistent_save_and_cache_disclosure(self):
+        files = self.gen.generate_all()
+        assert 'bottomNavigationBar: SafeArea' in files['lib/screens/mascota/mascota_form_screen.dart']
+        assert 'isCached = true' in files['lib/services/mascota_service.dart']
+        assert 'Copia guardada' in files['lib/screens/mascota/mascota_list_screen.dart']
 
     def test_detail_screen_includes_operations_and_context_icons(self):
         cliente = self.diagram.get_class("cls-cliente")
@@ -224,6 +238,18 @@ class TestFlutterGenerator:
         assert "final res = item.saldo();" in detail
         assert "notificar() ejecutada correctamente." in detail
         assert "saldo() ejecutada: $res" in detail
+
+    def test_form_respects_optional_fields_and_humanizes_relationship_ids(self):
+        mascota = self.diagram.get_class("cls-mascota")
+        mascota.attributes.append(UMLAttribute(name="peso", type="Double"))
+        files = self.gen.generate_all()
+        form = files["lib/screens/mascota/mascota_form_screen.dart"]
+
+        # Fields without a UML required constraint remain optional in mobile.
+        assert "Peso (opcional)" in form
+        # The inherited/generated relation is meaningful to a person filling it in.
+        assert "Cliente ID" in form
+        assert "ID de Cliente" in form
 
 
 # ─── Validation Tests ─────────────────────────────────────────────────────

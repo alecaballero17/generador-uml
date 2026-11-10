@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GeneradorUML — Editor de Diagramas de Clases</title>
     <meta name="description" content="Herramienta CASE para crear, editar e interpretar diagramas de clases UML 2.5+ y generar aplicaciones completas.">
-    <link rel="stylesheet" href="css/index.css?v=20260920markers">
+    <link rel="stylesheet" href="css/index.css?v=20261107chatlayout">
     <link rel="stylesheet" href="css/mobile.css?v=20260928canvas2">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#0f0f14">
+    <link rel="stylesheet" href="css/photo-import.css?v=20261108connections">
 </head>
 <body>
     <!-- ─── Top Bar ──────────────────────────────────────────────────── -->
@@ -45,7 +46,6 @@
             </div>
         </div>
         <div class="topbar-right">
-            <button class="btn-secondary" id="mobileMode">Vista móvil</button>
             <button class="btn-primary" id="btnShare">Compartir</button>
             <span id="collabStatus" class="collab-badge" title="Estado de sincronización en tiempo real">
                 <span class="status-dot online"></span> Conectado
@@ -193,6 +193,7 @@
 
         <!-- Dynamic Studio: Photo Scanner -->
         <section class="mobile-card mobile-studio-card" id="mobilePhotoSection" hidden>
+            <label><input type="checkbox" id="mobilePhotoUseVision"> Interpretar con IA en línea (envía esta foto a Google Gemini; requiere conexión)</label>
             <div class="mobile-card-header">
                 <div class="card-title-group">
                     <span class="card-icon-pill icon-photo">📷</span>
@@ -460,6 +461,10 @@
             <!-- Class properties -->
             <div id="classProperties" class="panel-body hidden">
                 <div class="prop-group">
+                    <button type="button" id="btnAssociationClass" class="btn-secondary" style="width:100%;white-space:normal">Representar como clase de asociación</button>
+                    <small style="display:block;margin-top:8px;color:var(--text-secondary);line-height:1.5">Une una clase intermedia a la asociación muchos a muchos mediante una línea discontinua.</small>
+                </div>
+                <div class="prop-group">
                     <label class="prop-label">Nombre</label>
                     <input type="text" id="propClassName" class="prop-input" placeholder="NombreClase">
                 </div>
@@ -521,6 +526,13 @@
                     <label class="prop-label">Nombre</label>
                     <input type="text" id="propRelName" class="prop-input" placeholder="nombre relación">
                 </div>
+                <div class="prop-group">
+                    <label class="prop-label" for="propRelNavigation">Flecha de navegación</label>
+                    <select id="propRelNavigation" class="prop-select">
+                        <option value="none">Sin flecha</option>
+                        <option value="target">Hacia la clase de destino</option>
+                    </select>
+                </div>
                 <fieldset class="prop-fieldset">
                     <legend>Origen</legend>
                     <div class="prop-group">
@@ -530,6 +542,7 @@
                     <div class="prop-group">
                         <label class="prop-label">Multiplicidad</label>
                         <select id="propRelSourceMult" class="prop-select">
+                            <option value="">Sin especificar</option>
                             <option value="1">1</option>
                             <option value="0..1">0..1</option>
                             <option value="0..*">0..*</option>
@@ -547,6 +560,7 @@
                     <div class="prop-group">
                         <label class="prop-label">Multiplicidad</label>
                         <select id="propRelTargetMult" class="prop-select">
+                            <option value="">Sin especificar</option>
                             <option value="1">1</option>
                             <option value="0..1">0..1</option>
                             <option value="0..*" selected>0..*</option>
@@ -587,6 +601,15 @@
                         <span class="stat-label">Operaciones</span>
                     </div>
                 </div>
+                <section id="apkBuildCard" class="apk-build-card hidden" aria-label="Estado de la APK">
+                    <div class="apk-build-heading"><span id="apkBuildIcon" class="apk-build-icon" aria-hidden="true">◌</span><div><h3 id="apkBuildTitle">Preparando tu aplicación</h3><p id="apkBuildStatus" role="status" aria-live="polite"></p></div><span id="apkBuildStep" class="apk-step-count"></span></div>
+                    <progress id="apkBuildProgress" max="6" aria-label="Etapas completadas de la APK"></progress>
+                    <p id="apkBuildHint" class="apk-build-hint"></p>
+                    <ol id="apkBuildStages" class="apk-build-stages" aria-label="Etapas de compilación"></ol>
+                    <div id="apkBuildDownloads" class="apk-build-downloads"></div>
+                    <p id="apkDownloadStatus" class="apk-download-status" role="status" aria-live="polite"></p>
+                    <details class="apk-build-details"><summary>Ver registro técnico</summary><pre id="apkBuildLog"></pre></details>
+                </section>
                 <div class="gen-options">
                     <div class="prop-group">
                         <label class="prop-label">Paquete base</label>
@@ -608,6 +631,7 @@
                     </div>
                 </div>
                 <div class="gen-actions">
+                    <button class="btn-primary large" id="btnBuildApk">Generar y compilar APK (local)</button>
                     <button class="btn-primary large" id="btnStartGeneration">
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M6 3L16 10L6 17V3Z" fill="currentColor"/></svg>
                         Generar Aplicación
@@ -677,49 +701,40 @@
     </div>
 
     <!-- ─── Photo Import Modal ───────────────────────────────────── -->
-    <div id="photoModal" class="modal hidden">
-        <div class="modal-content large">
-            <div class="modal-header">
-                <h3>Importar Fotografía</h3>
-                <button class="icon-btn" id="btnClosePhoto">
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 4L14 14M14 4L4 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                </button>
+    <div id="photoModal" class="modal hidden" data-stage="upload" role="dialog" aria-modal="true" aria-labelledby="photoModalTitle">
+        <div class="modal-content photo-studio">
+            <div class="modal-header photo-studio-header">
+                <div><span class="photo-eyebrow">DEL PAPEL AL LIENZO</span><h3 id="photoModalTitle">Importar desde una imagen</h3><p>Una foto de tu diagrama. Un punto de partida para seguir creando.</p></div>
+                <button class="icon-btn" id="btnClosePhoto" aria-label="Cerrar importación de imagen"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
             </div>
-            <div class="modal-body">
-                <div class="photo-dropzone" id="photoDropzone">
-                    <svg width="64" height="64" viewBox="0 0 64 64" fill="none" opacity="0.3">
-                        <rect x="4" y="10" width="56" height="44" rx="4" stroke="currentColor" stroke-width="2"/>
-                        <circle cx="22" cy="28" r="6" stroke="currentColor" stroke-width="2"/>
-                        <path d="M60 46L46 32L20 54" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                    <p>Arrastra una imagen aquí o haz clic para seleccionar</p>
+            <ol class="photo-steps" aria-label="Pasos de importación"><li data-photo-step="upload" aria-current="step"><span>1</span>Elige tu imagen</li><li data-photo-step="read"><span>2</span>Lee el diagrama</li><li data-photo-step="review"><span>3</span>Revisa e importa</li></ol>
+            <div class="modal-body photo-workspace">
+                <aside class="photo-source">
+                    <div class="photo-section-label"><span>01 / TU IMAGEN</span><button id="btnChangePhoto" class="photo-text-button hidden" type="button">Cambiar imagen</button></div>
+                    <button type="button" class="photo-dropzone" id="photoDropzone"><span class="photo-upload-icon"><svg width="34" height="34" viewBox="0 0 32 32" fill="none"><rect x="3" y="5" width="26" height="22" rx="5" stroke="currentColor" stroke-width="1.7"/><circle cx="11" cy="13" r="3" stroke="currentColor" stroke-width="1.7"/><path d="m5 24 8-7 5 4 6-7 5 6" stroke="currentColor" stroke-width="1.7"/></svg></span><strong>Tu diagrama empieza aquí</strong><span>Arrastra una imagen o haz clic para buscarla</span><small>Fotos de pizarra, papel o capturas · PNG, JPG y otros formatos de imagen</small></button>
                     <input type="file" id="photoInput" accept="image/*" class="hidden-input">
-                </div>
-                <div id="photoPreview" class="photo-preview hidden">
-                    <img id="photoImage" src="" alt="Preview">
-                </div>
-                <div id="photoActions" class="photo-actions hidden">
-                    <button class="btn-primary" id="btnProcessPhoto">Interpretar Diagrama</button>
-                </div>
-                <div id="photoReviewContainer" class="photo-review hidden">
-                    <div class="photo-review-header">
-                        <h4>Resultado de la Interpretación</h4>
-                        <span id="photoConfidenceBadge" class="confidence-badge">Confianza: 85%</span>
+                    <div id="photoPreview" class="photo-preview hidden"><div class="photo-image-frame"><img id="photoImage" src="" alt="Imagen original del diagrama para comparar con la lectura"></div><div class="photo-file-meta"><strong id="photoFileName"></strong><span id="photoFileSize"></span></div></div>
+                    <div id="photoActions" class="photo-actions hidden">
+                        <label class="photo-reader-choice"><input type="checkbox" id="photoUseVision"><span><strong>Usar IA en línea</strong><small id="photoReaderDescription">Desactivado: lectura local, sin enviar la imagen. Al activarlo, se envía a Google Gemini y requiere conexión.</small></span></label>
+                        <button class="btn-primary" id="btnProcessPhoto">Leer diagrama <span aria-hidden="true">→</span></button>
                     </div>
-                    <div id="photoReviewStats" class="photo-review-stats"></div>
-                    <div id="photoReviewNotes" class="photo-review-notes"></div>
-                    <label>Importar fotografía
-                        <select id="photoImportMode">
-                            <option value="append">Agregar al diagrama actual</option>
-                            <option value="replace">Reemplazar todas las clases y relaciones actuales</option>
-                        </select>
-                    </label>
-                    <p>Reemplazar quita el contenido actual. Puedes recuperarlo con Deshacer.</p>
-                    <div class="photo-review-actions">
-                        <button class="btn-primary" id="btnAcceptPhotoDiagram">✓ Aceptar e Importar al Lienzo</button>
-                        <button class="btn-secondary" id="btnDiscardPhotoDiagram">Descartar</button>
+                    <p class="photo-safety-note"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z" stroke="currentColor" stroke-width="1.7"/><path d="m8 12 3 3 5-6" stroke="currentColor" stroke-width="1.7"/></svg>Tu lienzo sigue intacto hasta que decidas importar.</p>
+                </aside>
+                <section class="photo-output" aria-label="Lectura y revisión">
+                    <div id="photoWelcome" class="photo-welcome"><span class="photo-section-label">02 / DE LA FOTO AL DIAGRAMA</span><h4>Menos transcribir.<br><em>Más crear.</em></h4><p>Reconoce las clases, sus campos y las posibles conexiones. Tú revisas el resultado antes de incorporarlo.</p><div class="photo-tips"><strong>Para una mejor lectura</strong><p><span>✓</span>Incluye el diagrama completo.</p><p><span>✓</span>Procura que el texto se vea nítido.</p><p><span>✓</span>Evita reflejos y sombras sobre las clases.</p></div></div>
+                    <div id="photoReadProgress" class="photo-reading hidden" role="status" aria-live="polite"><span class="photo-scan-symbol" aria-hidden="true">⌁</span><h4>Leyendo tu diagrama</h4><p id="photoReadStatus">Preparando la imagen…</p><progress id="photoReadBar" aria-label="Lectura del diagrama"></progress><small>Identificando clases, atributos y conexiones. No cierres este panel.</small></div>
+                    <div id="photoReadError" class="photo-read-error hidden" role="alert"></div>
+                    <div id="photoReviewContainer" class="photo-review hidden">
+                        <div class="photo-review-header"><div><span class="photo-section-label">03 / TU BORRADOR</span><h4>Revisa lo que encontramos</h4></div><span id="photoConfidenceBadge" class="confidence-badge">Pendiente de revisión</span></div>
+                        <div id="photoReviewStats" class="photo-review-stats"></div>
+                        <div id="photoClassCards" class="photo-class-cards"></div>
+                        <p class="photo-review-notice">Compara con tu imagen. Las conexiones propuestas se revisan por separado después de importar las clases.</p>
+                        <details class="photo-text-editor"><summary>Corregir nombres, campos o tipos</summary><label for="webPhotoText">Cada bloque representa una clase. Puedes corregir el texto antes de importar.</label><textarea id="webPhotoText" rows="9" spellcheck="false"></textarea><p id="photoDraftError" role="status"></p></details>
+                        <details class="photo-detection-details"><summary>Ver conexiones propuestas y observaciones</summary><div id="photoReviewNotes" class="photo-review-notes"></div></details>
+                        <div class="photo-import-choice"><label for="photoImportMode">¿Cómo quieres incorporarlo?</label><select id="photoImportMode"><option value="append">Agregar al diagrama actual</option><option value="replace">Reemplazar el diagrama actual</option></select><p id="photoImportExplanation">Conserva las clases y relaciones existentes y agrega las de esta imagen.</p></div>
+                        <div class="photo-review-actions"><button class="btn-primary" id="btnAcceptPhotoDiagram">Importar clases al lienzo <span aria-hidden="true">→</span></button><button class="btn-secondary" id="btnDiscardPhotoDiagram">Descartar lectura</button></div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     </div>
@@ -837,13 +852,32 @@
     </dialog>
 
     <!-- Hidden file inputs -->
+    <button id="openTeamChat" class="btn-primary" style="position:fixed;bottom:16px;left:16px;z-index:100">Equipo e IA</button>
+    <dialog id="teamChatDialog" aria-labelledby="teamTitle">
+        <header class="team-header">
+            <div><span class="team-eyebrow">ESPACIO COLABORATIVO</span><h2 id="teamTitle">Equipo e IA</h2><p>Una conversación compartida sobre tu diagrama.</p></div>
+            <button id="teamClose" class="btn-secondary" aria-label="Cerrar conversación">✕</button>
+        </header>
+        <div class="team-identity"><label for="teamActor">Tu nombre (obligatorio)</label><input id="teamActor" required aria-describedby="teamNameError" maxlength="60" placeholder="Por ejemplo, Alejandro"><span id="teamNameError" role="alert" hidden>Falta tu nombre. Escribilo para poder enviar.</span></div>
+        <div class="team-timeline"><div id="teamMessages" role="log" aria-label="Historial del equipo"></div><div class="team-empty"><span class="team-spark">✦</span><h3>Tu diagrama, con otra mirada</h3><p>Pedile a la IA que revise relaciones, resuelva una duda o proponga mejoras. Todo el equipo verá la conversación.</p><span>Probá: «¿Están bien las relaciones de este diagrama?»</span></div></div>
+        <div class="team-composer">
+            <label for="teamMessage">¿En qué te ayudamos?</label>
+            <textarea id="teamMessage" maxlength="4000" rows="3" placeholder="Escribí una consulta sobre el diagrama o un mensaje para tu equipo…"></textarea>
+            <div class="team-actions"><button id="teamAsk" class="btn-primary">✦ Enviar consulta a la IA</button><button id="teamPropose" class="btn-secondary">Proponer cambios con IA</button><button id="teamSend" class="btn-secondary">Enviar mensaje al equipo</button></div>
+            <p class="team-help">Consultar pide una explicación. Las propuestas modifican el diagrama solo cuando pulsás Aplicar.</p>
+            <div class="team-extras"><button id="teamDecision" class="btn-secondary">Guardar mensaje como acuerdo</button><label><input id="teamAudio" type="checkbox">Leer respuestas en voz alta</label></div>
+            <p id="teamStatus" role="status" aria-live="polite"></p>
+        </div>
+    </dialog>
     <input type="file" id="importFileInput" accept=".json,.mdj,.xmi,.xml" class="hidden-input">
 
     <script src="js/collaboration.js?v=20260920markers"></script>
     <script src="js/uml-commands.js?v=20260920markers"></script>
-    <script src="js/app.js?v=20260920markers"></script>
-    <script src="js/local-ai.js?v=20260920markers"></script>
-    <script src="js/mobile.js?v=20260920markers"></script>
+    <script src="js/app.js?v=20261108association-class"></script>
+    <script src="js/local-ai.js?v=20261108ocr-edge"></script>
+    <script src="js/mobile.js?v=20261108association-class"></script>
+    <script src="js/association-classes.js?v=20261108association-class"></script>
     <script src="js/conversational-assistant.js?v=20260920markers"></script>
+    <script src="js/team-chat.js?v=20261107localtime"></script>
 </body>
 </html>

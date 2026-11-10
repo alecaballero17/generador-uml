@@ -15,11 +15,12 @@ Incluye:
 - lib/screens/{entidad}/{entidad}_detail_screen.dart (vista detallada y relaciones)
 - lib/screens/{entidad}/{entidad}_form_screen.dart (formulario validado para crear y editar)
 - lib/screens/dashboard_screen.dart (panel principal con accesos rápidos y estado del servidor)
-- lib/screens/assistant_screen.dart (asistente local de voz y comandos en lenguaje natural)
 """
 
 from __future__ import annotations
 import os
+import json
+from pathlib import Path
 import re
 from typing import Dict, List, Any, Optional
 from ..models.uml_model import (
@@ -75,7 +76,8 @@ class FlutterGenerator:
         package_name: str = "com.generated.app",
         api_base_url: str = "http://10.0.2.2:8080/api",
     ):
-        self.diagram = diagram
+        from ..models.association_classes import normalize_association_classes
+        self.diagram = normalize_association_classes(diagram)
         self.raw_app_name = app_name or diagram.name or "AppGenerada"
         self.app_name = self._to_snake_case(self.raw_app_name)
         self.package_name = package_name
@@ -103,6 +105,20 @@ class FlutterGenerator:
     def _to_pascal_case(self, name: str) -> str:
         return ''.join(p.capitalize() for p in re.split(r'[^a-zA-Z0-9]', name) if p)
 
+    def _humanize_name(self, name: str) -> str:
+        """Convert technical UML/REST names (ventaId) into mobile labels."""
+        spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name).replace("_", " ")
+        words = []
+        for word in spaced.split():
+            lowered = word.lower()
+            if lowered == "id":
+                words.append("ID")
+            elif lowered == "ids":
+                words.append("IDs")
+            else:
+                words.append(word[:1].upper() + word[1:])
+        return " ".join(words) or "Valor"
+
     def _pluralize(self, name: str) -> str:
         """Simple English pluralization matching Spring Boot generator."""
         if name.endswith("s") or name.endswith("x") or name.endswith("z"):
@@ -122,6 +138,15 @@ class FlutterGenerator:
 
     def _dart_type(self, uml_type: str) -> str:
         return "List<int>" if uml_type == "RelationIds" else self.TYPE_MAP.get(uml_type, "String")
+
+    def _is_required_attribute(self, attr: UMLAttribute) -> bool:
+        """Use the same required semantics in generated mobile forms as the API."""
+        multiplicity = str(getattr(attr, "multiplicity", "") or "")
+        constraints = getattr(attr, "constraints", []) or []
+        return multiplicity in ("1", "1..*") or any(
+            "required" in str(constraint).lower() or "notnull" in str(constraint).lower()
+            for constraint in constraints
+        )
 
     def _get_primary_key(self, cls: UMLClass) -> UMLAttribute:
         for attr in cls.attributes:
@@ -176,9 +201,8 @@ class FlutterGenerator:
         files["lib/services/api_config.dart"] = self._generate_api_config()
         files["lib/services/offline_cache_service.dart"] = self._generate_offline_cache()
 
-        # 3. Pantalla de Dashboard y Asistente
+        # 3. Inicio y navegación adaptados a las entidades del diagrama
         files["lib/screens/dashboard_screen.dart"] = self._generate_dashboard()
-        files["lib/screens/assistant_screen.dart"] = self._generate_assistant()
 
         # 4. Por cada entidad: Model, Service, ListScreen, DetailScreen, FormScreen
         for original in self.entities:
@@ -240,7 +264,7 @@ class FlutterGenerator:
             )
             wrapper.write_text(wrapper_text, encoding="utf-8")
 
-        # Voice input requires Android API 21 or above.  Pin the NDK requested
+        # Pin Android API 21 and the NDK requested
         # by current Flutter plugins as well, so the generated APK has a
         # reproducible Android toolchain configuration.
         app_gradle = Path(output_dir) / "android/app/build.gradle"
@@ -258,14 +282,19 @@ class FlutterGenerator:
         manifest = Path(output_dir) / "android/app/src/main/AndroidManifest.xml"
         if manifest.exists():
             text = manifest.read_text(encoding="utf-8")
-            if 'android.permission.RECORD_AUDIO' not in text:
-                text = text.replace("    <application", '    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <application android:usesCleartextTraffic="true"')
+            text = re.sub(r'\s*<uses-permission android:name="android.permission.RECORD_AUDIO"\s*/>', '', text)
+            if 'android.permission.INTERNET' not in text:
+                text = text.replace('    <application', '    <uses-permission android:name="android.permission.INTERNET"/>\n    <application', 1)
+            if 'android:usesCleartextTraffic' not in text:
+                text = text.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
             manifest.write_text(text, encoding="utf-8")
         import plistlib
         info = Path(output_dir) / "ios/Runner/Info.plist"
         if info.exists():
             data = plistlib.loads(info.read_bytes())
-            data.update(NSMicrophoneUsageDescription="Dictar comandos para gestionar registros", NSSpeechRecognitionUsageDescription="Transcribir comandos de voz", NSAppTransportSecurity={"NSAllowsLocalNetworking": True})
+            data.pop('NSMicrophoneUsageDescription', None)
+            data.pop('NSSpeechRecognitionUsageDescription', None)
+            data.update(NSAppTransportSecurity={"NSAllowsLocalNetworking": True})
             info.write_bytes(plistlib.dumps(data))
         generated_files = self.generate_all()
         written_paths: List[str] = []
@@ -298,7 +327,6 @@ dependencies:
   http: ^1.2.0
   intl: ^0.19.0
   shared_preferences: ^2.2.0
-  speech_to_text: ^6.6.0
 
 dev_dependencies:
   flutter_test:
@@ -330,8 +358,8 @@ Aplicación móvil generada automáticamente por **GeneradorUML** a partir del d
 
 ## Conexión al Backend Spring Boot
 Por defecto, la app está configurada para conectar a:
-- **Android Emulator**: `http://10.0.2.2:8080/api`
-- **Dispositivo Físico**: Cambia la IP en el menú lateral de la app o en `lib/services/api_config.dart` (ejemplo: `http://192.168.1.50:8080/api`).
+- **Dirección configurada**: `{self.api_base_url}`
+- **Dispositivo Físico**: Cambia la dirección en Ajustes > Conexión o en `lib/services/api_config.dart` (ejemplo: `http://192.168.1.50:8080/api`).
 - **Web / Desktop**: `http://localhost:8080/api`
 
 ## Ejecución
@@ -352,17 +380,17 @@ flutter run -d chrome
 2. **CRUD Completo**: Pantallas de listado, búsqueda, detalle, creación y edición con validaciones.
 3. **Manejo de Estados**: Estados de carga, errores con reintento y estado vacío ilustrado.
 4. **Caché Offline**: Funciona en modo offline con datos previamente consultados.
-5. **Asistente de Voz / IA**: Pantalla de comandos interactivos para consultar y operar entidades.
+5. **Inicio adaptable**: Secciones y formularios derivados de las clases del diagrama, sin asistentes adicionales.
 """
 
     def _generate_api_config(self) -> str:
-        return """import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
+        return """import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Configuración global de la API REST del backend Spring Boot.
 class ApiConfig {
   /// URL base por defecto: localhost si corre en Web/Desktop, o 10.0.2.2 si corre en emulador Android.
-  static String baseUrl = kIsWeb ? 'http://localhost:8080/api' : 'http://10.0.2.2:8080/api';
+  static String baseUrl = __DEFAULT_API_URL__;
 
   /// Timeout estándar para peticiones HTTP en segundos.
   static const Duration timeoutDuration = Duration(seconds: 10);
@@ -374,8 +402,19 @@ class ApiConfig {
       };
 
   /// Permite actualizar la URL base en tiempo de ejecución (ej. desde el menú lateral para IP LAN).
-  static void setBaseUrl(String newUrl) {
-    baseUrl = newUrl.endsWith('/') ? newUrl.substring(0, newUrl.length - 1) : newUrl;
+  static Future<void> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    baseUrl = prefs.getString('backend_url') ?? baseUrl;
+  }
+
+  static Future<void> setBaseUrl(String newUrl) async {
+    final uri = Uri.tryParse(newUrl.trim());
+    if (uri == null || !['http', 'https'].contains(uri.scheme) || uri.host.isEmpty) {
+      throw const FormatException('Escribe una dirección http o https válida');
+    }
+    baseUrl = newUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('backend_url', baseUrl);
   }
 
   /// Verifica si el servidor backend Spring Boot está accesible.
@@ -390,7 +429,7 @@ class ApiConfig {
     }
   }
 }
-"""
+""".replace('__DEFAULT_API_URL__', self._dart_string(self.api_base_url))
 
     def _generate_offline_cache(self) -> str:
         return """import 'dart:convert';
@@ -456,699 +495,27 @@ class OfflineCacheService {
 }
 """
 
+    @staticmethod
+    def _dart_string(value: str) -> str:
+        return json.dumps(value, ensure_ascii=False).replace('$', r'\$')
+
+    def _mobile_template(self, name: str) -> str:
+        return (Path(__file__).resolve().parent.parent / 'templates' / name).read_text(encoding='utf-8-sig')
+
     def _generate_main(self) -> str:
-        title = self.diagram.name or "GeneradorUML App"
-
-        return f"""import 'package:flutter/material.dart';
-import 'screens/dashboard_screen.dart';
-
-void main() {{
-  runApp(const UMLGeneratedApp());
-}}
-
-class UMLGeneratedApp extends StatefulWidget {{
-  const UMLGeneratedApp({{super.key}});
-
-  @override
-  State<UMLGeneratedApp> createState() => _UMLGeneratedAppState();
-}}
-
-class _UMLGeneratedAppState extends State<UMLGeneratedApp> {{
-  ThemeMode _themeMode = ThemeMode.system;
-
-  void _toggleTheme() {{
-    setState(() {{
-      _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
-    }});
-  }}
-
-  @override
-  Widget build(BuildContext context) {{
-    return MaterialApp(
-      title: '{title}',
-      debugShowCheckedModeBanner: false,
-      themeMode: _themeMode,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1),
-          brightness: Brightness.light,
-        ),
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
-        ),
-        cardTheme: CardTheme(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1),
-          brightness: Brightness.dark,
-        ),
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
-        ),
-        cardTheme: CardTheme(
-          elevation: 3,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
-      home: DashboardScreen(onToggleTheme: _toggleTheme),
-    );
-  }}
-}}
-"""
+        return self._mobile_template('flutter_main.dart').replace('__TITLE__', self._dart_string(self.raw_app_name))
 
     def _generate_dashboard(self) -> str:
-        entities_tiles = []
-        for cls in self.entities:
+        imports, modules = [], []
+        icons = ['inventory_2_outlined', 'people_outline_rounded', 'receipt_long_outlined', 'category_outlined']
+        for index, cls in enumerate(self.entities):
             snake = self._to_snake_case(cls.name)
-            entities_tiles.append(f"""
-            _EntityCard(
-              title: '{cls.name}',
-              description: '{len(cls.attributes)} atributos, CRUD completo',
-              icon: Icons.table_chart_rounded,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const {cls.name}ListScreen()),
-              ),
-            ),""")
-        entities_tiles_str = "\n".join(entities_tiles)
-
-        return f"""import 'package:flutter/material.dart';
-import '../services/api_config.dart';
-import 'assistant_screen.dart';
-{chr(10).join([f"import '{self._to_snake_case(c.name)}/{self._to_snake_case(c.name)}_list_screen.dart';" for c in self.entities])}
-
-class DashboardScreen extends StatefulWidget {{
-  final VoidCallback onToggleTheme;
-  const DashboardScreen({{super.key, required this.onToggleTheme}});
-
-  @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
-}}
-
-class _DashboardScreenState extends State<DashboardScreen> {{
-  bool _isCheckingBackend = false;
-  bool? _isBackendOnline;
-  final TextEditingController _urlController = TextEditingController(text: ApiConfig.baseUrl);
-
-  @override
-  void initState() {{
-    super.initState();
-    _checkServer();
-  }}
-
-  Future<void> _checkServer() async {{
-    setState(() => _isCheckingBackend = true);
-    final online = await ApiConfig.checkConnection();
-    if (mounted) {{
-      setState(() {{
-        _isBackendOnline = online;
-        _isCheckingBackend = false;
-      }});
-    }}
-  }}
-
-  void _showConfigDialog() {{
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Configuración de Servidor'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Dirección del backend Spring Boot:',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _urlController,
-              decoration: const InputDecoration(
-                hintText: 'http://10.0.2.2:8080/api',
-                prefixIcon: Icon(Icons.link),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              '• Android Emulator: http://10.0.2.2:8080/api\\n'
-              '• Celular en la misma red: http://192.168.x.x:8080/api\\n'
-              '• Web/Desktop: http://localhost:8080/api',
-              style: TextStyle(fontSize: 11, color: Colors.grey),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () {{
-              ApiConfig.setBaseUrl(_urlController.text.trim());
-              Navigator.pop(ctx);
-              _checkServer();
-            }},
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-  }}
-
-  @override
-  Widget build(BuildContext context) {{
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('{self.diagram.name or "GeneradorUML"}'),
-        actions: [
-          IconButton(
-            tooltip: 'Cambiar tema',
-            icon: const Icon(Icons.brightness_medium),
-            onPressed: widget.onToggleTheme,
-          ),
-          IconButton(
-            tooltip: 'Configurar servidor',
-            icon: const Icon(Icons.settings),
-            onPressed: _showConfigDialog,
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _checkServer,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Banner de estado del backend
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: _isBackendOnline == true
-                    ? Colors.green.withOpacity(0.12)
-                    : Colors.amber.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _isBackendOnline == true ? Colors.green : Colors.amber,
-                  width: 1.5,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _isBackendOnline == true ? Icons.cloud_done : Icons.cloud_off,
-                    color: _isBackendOnline == true ? Colors.green : Colors.amber.shade800,
-                    size: 32,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _isBackendOnline == true
-                              ? 'Servidor Conectado'
-                              : 'Modo Offline / Servidor no detectado',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: _isBackendOnline == true
-                                ? Colors.green.shade900
-                                : Colors.amber.shade900,
-                          ),
-                        ),
-                        Text(
-                          _isBackendOnline == true
-                              ? ApiConfig.baseUrl
-                              : 'Usando caché local. Toca para reintentar.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.colorScheme.onSurface.withOpacity(0.7),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_isCheckingBackend)
-                    const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  else
-                    IconButton(
-                      icon: const Icon(Icons.refresh),
-                      onPressed: _checkServer,
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Tarjeta de Asistente IA / Voz
-            Card(
-              color: colorScheme.primaryContainer,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AssistantScreen()),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: colorScheme.primary,
-                        child: const Icon(Icons.mic, color: Colors.white, size: 28),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Asistente de consultas y voz',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Consulta registros o abre formularios con texto y voz',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onPrimaryContainer.withOpacity(0.8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.arrow_forward_ios, size: 16),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Título de Módulos
-            Row(
-              children: [
-                const Icon(Icons.folder_open, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Entidades del Diagrama ({len(self.entities)})',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Lista de entidades
-            {entities_tiles_str}
-          ],
-        ),
-      ),
-    );
-  }}
-}}
-
-class _EntityCard extends StatelessWidget {{
-  final String title;
-  final String description;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _EntityCard({{
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.onTap,
-  }});
-
-  @override
-  Widget build(BuildContext context) {{
-    final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        leading: CircleAvatar(
-          backgroundColor: theme.colorScheme.secondaryContainer,
-          child: Icon(icon, color: theme.colorScheme.onSecondaryContainer),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        subtitle: Text(description),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      ),
-    );
-  }}
-}}
-"""
-
-    def _generate_assistant(self) -> str:
-        entities_names = ", ".join([f"'{c.name}'" for c in self.entities])
-        assistant_imports = []
-        actions = []
-        for entity in self.entities:
-            snake = self._to_snake_case(entity.name)
-            display = self._get_display_field(entity).name
-            assistant_imports += [f"import '../services/{snake}_service.dart';", f"import '{snake}/{snake}_form_screen.dart';"]
-            actions.append(f"""      case '{entity.name}':
-        if (create) {{
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => const {entity.name}FormScreen()));
-          return 'Formulario de {entity.name} abierto. El registro solo se guarda al pulsar Crear.';
-        }}
-        final items = await {entity.name}Service().getAll();
-        if (count) return '${{items.length}} registros de {entity.name} disponibles.';
-        if (items.isEmpty) return 'No hay registros de {entity.name} disponibles.';
-        return items.take(20).map((item) => '${{item.id}}: ${{item.{display}}}').join('\\n');
-""")
-        assistant_imports_str = "\n".join(assistant_imports)
-        actions_str = "\n".join(actions)
-        return f"""import 'package:flutter/material.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
-import '../services/api_config.dart';
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
-{assistant_imports_str}
-
-/// Asistente local de comandos de voz y texto con reconocimiento de voz real.
-class AssistantScreen extends StatefulWidget {{
-  const AssistantScreen({{super.key}});
-
-  @override
-  State<AssistantScreen> createState() => _AssistantScreenState();
-}}
-
-class _AssistantScreenState extends State<AssistantScreen> {{
-  final TextEditingController _commandController = TextEditingController();
-  final List<_ChatMessage> _messages = [];
-  bool _isListening = false;
-  bool _speechAvailable = false;
-  final stt.SpeechToText _speech = stt.SpeechToText();
-
-  final List<String> _entities = [{entities_names}];
-
-  @override
-  void initState() {{
-    super.initState();
-    _restoreHistory();
-    _messages.add(
-      const _ChatMessage(
-        text: '¡Hola! Soy tu asistente de GeneradorUML. Puedes consultar datos o darme comandos como:\\n'
-            '• "¿Cuántos registros hay en [entidad]?"\\n'
-            '• "Listar [entidad]"\\n'
-            '• "Crear nuevo [entidad]"\\n'
-            '• "Estado del servidor"',
-        isUser: false,
-      ),
-    );
-  }}
-
-  /// Inicializa el motor de reconocimiento de voz.
-  Future<void> _initSpeech() async {{
-    try {{
-      _speechAvailable = await _speech.initialize(
-        onError: (error) {{
-          debugPrint('Speech error: ${{error.errorMsg}}');
-          if (mounted) {{
-            setState(() => _isListening = false);
-          }}
-        }},
-        onStatus: (status) {{
-          if (status == 'notListening' && mounted) {{
-            setState(() => _isListening = false);
-          }}
-        }},
-      );
-    }} catch (e) {{
-      debugPrint('Speech init failed: $e');
-      _speechAvailable = false;
-    }}
-    if (mounted) setState(() {{}});
-  }}
-
-  bool _busy = false;
-
-  Future<void> _restoreHistory() async {{
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString('assistant_history_${{ApiConfig.baseUrl}}');
-    if (saved == null || !mounted) return;
-    try {{
-      final list = jsonDecode(saved) as List;
-      setState(() {{
-        _messages.addAll(list.map((m) => _ChatMessage(text: m['text'] as String, isUser: m['isUser'] as bool)));
-      }});
-    }} catch (_) {{ /* Historial anterior incompatible. */ }}
-  }}
-
-  Future<void> _saveHistory() async {{
-    final prefs = await SharedPreferences.getInstance();
-    final recent = _messages.skip(_messages.length > 100 ? _messages.length - 100 : 0);
-    await prefs.setString('assistant_history_${{ApiConfig.baseUrl}}', jsonEncode(recent.map((m) => {{'text': m.text, 'isUser': m.isUser}}).toList()));
-  }}
-
-  Future<String> _runCommand(String entity, bool create, bool count) async {{
-    switch (entity) {{
-{actions_str}
-      default: return 'Indica una entidad: ${{_entities.join(", ")}}.';
-    }}
-  }}
-
-  Future<void> _processCommand(String text) async {{
-    if (text.trim().isEmpty || _busy) return;
-    final userText = text.trim();
-    _commandController.clear();
-    setState(() {{
-      _busy = true;
-      _messages.add(_ChatMessage(text: userText, isUser: true));
-    }});
-    String response;
-    try {{
-      final lower = userText.toLowerCase();
-      if (lower.contains('servidor') || lower.contains('conexión')) {{
-        response = await ApiConfig.checkConnection() ? 'Servidor disponible.' : 'Servidor no disponible. Las consultas pueden usar los datos guardados en este dispositivo.';
-      }} else {{
-        final entities = _entities.where((e) => lower.replaceAll(' ', '').contains(e.toLowerCase())).toList();
-        final create = RegExp(r'crear|nuevo|nueva|registrar').hasMatch(lower);
-        final count = RegExp(r'cuantos|cuántos|total|contar').hasMatch(lower);
-        final list = RegExp(r'listar|mostrar|consultar|ver').hasMatch(lower);
-        if (entities.length == 1 && (create || count || list)) {{
-          response = await _runCommand(entities.single, create, count);
-        }} else {{
-          response = 'Usa "listar", "contar" o "crear" y una entidad: ${{_entities.join(", ")}}. Las consultas muestran registros disponibles, incluidos los guardados localmente.';
-        }}
-      }}
-    }} catch (e) {{
-      response = 'No se pudo completar la operación: $e';
-    }}
-    if (!mounted) return;
-    setState(() {{
-      _busy = false;
-      _messages.add(_ChatMessage(text: response, isUser: false));
-    }});
-    await _saveHistory();
-  }}
-
-  /// Inicia o detiene la escucha de voz real con speech_to_text.
-  void _toggleVoiceInput() async {{
-    if (_isListening) {{
-      await _speech.stop();
-      setState(() => _isListening = false);
-      return;
-    }}
-
-    if (!_speechAvailable) await _initSpeech();
-    if (!mounted) return;
-    if (!_speechAvailable) {{
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Reconocimiento de voz no disponible en este dispositivo.'),
-          duration: Duration(seconds: 3),
-        ),
-      );
-      return;
-    }}
-
-    setState(() => _isListening = true);
-
-    await _speech.listen(
-      onResult: (result) {{
-        if (result.finalResult && result.recognizedWords.isNotEmpty) {{
-          _processCommand(result.recognizedWords);
-          setState(() => _isListening = false);
-        }} else if (!result.finalResult) {{
-          // Mostrar texto parcial mientras se dicta
-          setState(() {{
-            _commandController.text = result.recognizedWords;
-          }});
-        }}
-      }},
-      localeId: 'es_ES',
-      listenOptions: stt.SpeechListenOptions(
-        listenMode: stt.ListenMode.confirmation,
-        cancelOnError: true,
-      ),
-      listenFor: const Duration(seconds: 15),
-      pauseFor: const Duration(seconds: 3),
-    );
-  }}
-
-  @override
-  void dispose() {{
-    _speech.stop();
-    _commandController.dispose();
-    super.dispose();
-  }}
-
-  @override
-  Widget build(BuildContext context) {{
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Asistente Local'),
-        actions: [
-          if (_speechAvailable)
-            const Padding(
-              padding: EdgeInsets.only(right: 12),
-              child: Chip(
-                avatar: Icon(Icons.mic, size: 16),
-                label: Text('Voz activa', style: TextStyle(fontSize: 11)),
-              ),
-            )
-          else
-            const Padding(
-              padding: EdgeInsets.only(right: 12),
-              child: Chip(
-                avatar: Icon(Icons.mic_off, size: 16),
-                label: Text('Sin voz', style: TextStyle(fontSize: 11)),
-              ),
-            ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {{
-                final msg = _messages[index];
-                return Align(
-                  alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(14),
-                    constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.78,
-                    ),
-                    decoration: BoxDecoration(
-                      color: msg.isUser
-                          ? colorScheme.primary
-                          : colorScheme.surfaceVariant,
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(16),
-                        topRight: const Radius.circular(16),
-                        bottomLeft: Radius.circular(msg.isUser ? 16 : 4),
-                        bottomRight: Radius.circular(msg.isUser ? 4 : 16),
-                      ),
-                    ),
-                    child: Text(
-                      msg.text,
-                      style: TextStyle(
-                        color: msg.isUser ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                );
-              }},
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              child: Row(
-                children: [
-                  IconButton.filled(
-                    style: IconButton.styleFrom(
-                      backgroundColor: _isListening ? Colors.red : colorScheme.primaryContainer,
-                      foregroundColor: _isListening ? Colors.white : colorScheme.onPrimaryContainer,
-                    ),
-                    icon: Icon(_isListening ? Icons.mic : Icons.mic_none),
-                    onPressed: _toggleVoiceInput,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _commandController,
-                      decoration: InputDecoration(
-                        hintText: _isListening ? 'Escuchando...' : 'Escribe o dicta un comando...',
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      ),
-                      onSubmitted: _processCommand,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    icon: const Icon(Icons.send),
-                    onPressed: () => _processCommand(_commandController.text),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }}
-}}
-
-class _ChatMessage {{
-  final String text;
-  final bool isUser;
-  const _ChatMessage({{required this.text, required this.isUser}});
-}}
-"""
+            imports += [f"import '{snake}/{snake}_list_screen.dart';", f"import '{snake}/{snake}_form_screen.dart';"]
+            modules.append(f"_Module({self._dart_string(self._humanize_name(cls.name))}, {self._dart_string(self._get_endpoint_path(cls.name))}, Icons.{icons[index % len(icons)]}, (_) => const {cls.name}ListScreen(), (_) => const {cls.name}FormScreen()),")
+        return (self._mobile_template('flutter_dashboard.dart')
+                .replace('__TITLE__', self._dart_string(self._humanize_name(self.raw_app_name)))
+                .replace('__IMPORTS__', '\n'.join(imports))
+                .replace('__MODULES__', '\n'.join(modules)))
 
     def _generate_model(self, cls: UMLClass) -> str:
         pk = self._get_primary_key(cls)
@@ -1358,6 +725,7 @@ import 'offline_cache_service.dart';
 class {cls.name}Service {{
   final String _endpoint = '{endpoint}';
   final OfflineCacheService _cache = OfflineCacheService();
+  bool isCached = false;
 
   String get _url => '${{ApiConfig.baseUrl}}$_endpoint';
 
@@ -1380,6 +748,7 @@ class {cls.name}Service {{
         }}
 
         final items = list.map((item) => {cls.name}.fromJson(item as Map<String, dynamic>)).toList();
+        isCached = false;
         // Guardar en caché offline
         await _cache.saveAll('{snake}', list.cast<Map<String, dynamic>>());
         return items;
@@ -1390,6 +759,7 @@ class {cls.name}Service {{
       // Fallback a caché offline si la red falla
       final cached = await _cache.getAll('{snake}');
       if (cached.isNotEmpty) {{
+        isCached = true;
         return cached.map((item) => {cls.name}.fromJson(item)).toList();
       }}
       rethrow;
@@ -1469,10 +839,11 @@ class {cls.name}Service {{
         subtitle_code = ""
         if subtitle_attr:
             subtitle_code = f"""subtitle: item.{subtitle_attr.name} != null
-                            ? Text('{subtitle_attr.name.capitalize()}: ${{item.{subtitle_attr.name}}}')
+                            ? Text('{self._humanize_name(subtitle_attr.name)}: ${{_displayValue(item.{subtitle_attr.name})}}')
                             : null,"""
 
         return f"""import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../models/{snake}.dart';
 import '../../services/{snake}_service.dart';
 import '{snake}_detail_screen.dart';
@@ -1487,6 +858,7 @@ class {cls.name}ListScreen extends StatefulWidget {{
 }}
 
 class _{cls.name}ListScreenState extends State<{cls.name}ListScreen> {{
+  String _displayValue(dynamic value) => value is DateTime ? DateFormat('dd/MM/yyyy').format(value) : value?.toString() ?? 'Sin dato';
   final {cls.name}Service _service = {cls.name}Service();
   List<{cls.name}> _items = [];
   List<{cls.name}> _filteredItems = [];
@@ -1586,7 +958,7 @@ class _{cls.name}ListScreenState extends State<{cls.name}ListScreen> {{
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Módulo {cls.name}'),
+        title: const Text('{self._humanize_name(cls.name)}'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -1596,7 +968,7 @@ class _{cls.name}ListScreenState extends State<{cls.name}ListScreen> {{
       ),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
-        label: const Text('Nuevo'),
+        label: const Text('Nuevo registro'),
         onPressed: () async {{
           final created = await Navigator.push<bool>(
             context,
@@ -1607,6 +979,15 @@ class _{cls.name}ListScreenState extends State<{cls.name}ListScreen> {{
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+            child: Align(alignment: Alignment.centerLeft, child: Text(
+              _isLoading ? 'Buscando tus registros…' : '${{_filteredItems.length}} registros · toca uno para ver sus detalles',
+              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withOpacity(.6)),
+            )),
+          ),
+          if (_service.isCached && !_isLoading)
+            const Padding(padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8), child: Text('Copia guardada · sin conexión. Conecta el servidor para guardar cambios.', style: TextStyle(fontSize: 12, color: Color(0xFFE0B97C)))),
           // Barra de búsqueda
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -1668,7 +1049,7 @@ class _{cls.name}ListScreenState extends State<{cls.name}ListScreen> {{
               ),
               const SizedBox(height: 8),
               Text(
-                _errorMessage!,
+                'Comprueba la conexión en Inicio → Ajustes y vuelve a intentarlo.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
@@ -1702,7 +1083,7 @@ class _{cls.name}ListScreenState extends State<{cls.name}ListScreen> {{
               ),
               const SizedBox(height: 8),
               const Text(
-                'Toca el botón "+ Nuevo" para agregar el primer registro.',
+                'Usa «Nuevo registro» para empezar.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),
@@ -1714,7 +1095,7 @@ class _{cls.name}ListScreenState extends State<{cls.name}ListScreen> {{
 
     // Lista de resultados
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
       itemCount: _filteredItems.length,
       itemBuilder: (context, index) {{
         final item = _filteredItems[index];
@@ -1729,7 +1110,7 @@ class _{cls.name}ListScreenState extends State<{cls.name}ListScreen> {{
               ),
             ),
             title: Text(
-              item.{display_attr.name} == null ? 'Sin {display_attr.name}' : '${{item.{display_attr.name}}}',
+              item.{display_attr.name} == null ? 'Sin {self._humanize_name(display_attr.name).lower()}' : _displayValue(item.{display_attr.name}),
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             {subtitle_code}
@@ -2088,12 +1469,14 @@ class _DetailTile extends StatelessWidget {{
         controllers_dispose = []
         form_fields_widgets = []
         model_construction_fields = []
+        required_date_checks = []
 
         for attr in cls.attributes:
             if attr.name in (pk.name, "version"):
                 continue
 
             dtype = self._dart_type(attr.type)
+            required = self._is_required_attribute(attr)
             c_name = f"_{attr.name}Controller"
 
             if dtype == "bool":
@@ -2101,7 +1484,7 @@ class _DetailTile extends StatelessWidget {{
                 controllers_init.append(f"    _{attr.name} = widget.item?.{attr.name} ?? false;")
                 form_fields_widgets.append(f"""
               SwitchListTile(
-                title: const Text('{attr.name.capitalize()}'),
+                title: const Text('{self._humanize_name(attr.name)}'),
                 value: _{attr.name},
                 onChanged: (val) => setState(() => _{attr.name} = val),
               ),
@@ -2110,10 +1493,17 @@ class _DetailTile extends StatelessWidget {{
             elif dtype == "DateTime":
                 controllers_decl.append(f"  DateTime? _{attr.name};")
                 controllers_init.append(f"    _{attr.name} = widget.item?.{attr.name};")
+                if required:
+                    required_date_checks.append(f"""    if (_{attr.name} == null) {{
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona {self._humanize_name(attr.name).lower()}')),
+      );
+      return;
+    }}""")
                 form_fields_widgets.append(f"""
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text('Fecha {attr.name.capitalize()}: ${{_{attr.name} != null ? DateFormat('yyyy-MM-dd').format(_{attr.name}!) : "Sin seleccionar"}}'),
+                title: Text('{self._humanize_name(attr.name)}: ${{_{attr.name} != null ? DateFormat('dd/MM/yyyy').format(_{attr.name}!) : "Seleccionar fecha"}}'),
                 trailing: const Icon(Icons.calendar_today),
                 onTap: () async {{
                   final picked = await showDatePicker(
@@ -2137,29 +1527,47 @@ class _DetailTile extends StatelessWidget {{
 
                 kb_type = "TextInputType.text"
                 if dtype in ("int", "double"):
-                    kb_type = "TextInputType.number"
+                    kb_type = "const TextInputType.numberWithOptions(signed: true, decimal: " + ("true" if dtype == "double" else "false") + ")"
 
-                validator_logic = f"""if (val == null || val.trim().isEmpty) {{
+                validator_logic = ""
+                if required:
+                    validator_logic = f"""if (val == null || val.trim().isEmpty) {{
                   return 'El campo {attr.name} es obligatorio';
                 }}"""
                 if dtype == "int":
                     validator_logic += """
-                if (int.tryParse(val) == null) {
+                if (val != null && val.trim().isNotEmpty && int.tryParse(val) == null) {
                   return 'Ingrese un número entero válido';
                 }"""
                 elif dtype == "double":
                     validator_logic += """
-                if (double.tryParse(val) == null) {
+                if (val != null && val.trim().isNotEmpty && double.tryParse(val) == null) {
                   return 'Ingrese un valor numérico válido';
                 }"""
+                elif dtype == "List<int>":
+                    validator_logic += """
+                if (val != null && val.trim().isNotEmpty && val.split(',').any((id) => int.tryParse(id.trim()) == null)) {
+                  return 'Ingrese IDs numéricos separados por comas';
+                }"""
+
+                human_name = self._humanize_name(attr.name)
+                label = human_name + (" *" if required else " (opcional)")
+                if dtype == "List<int>":
+                    relation_name = self._humanize_name(attr.name[:-3]) if attr.name.endswith("Ids") else human_name
+                    hint = f"IDs de {relation_name} separados por comas"
+                elif attr.name.endswith("Id"):
+                    relation_name = self._humanize_name(attr.name[:-2])
+                    hint = f"ID de {relation_name}"
+                else:
+                    hint = f"Ingrese {human_name.lower()}"
 
                 form_fields_widgets.append(f"""
               TextFormField(
                 controller: {c_name},
                 keyboardType: {kb_type},
                 decoration: const InputDecoration(
-                  labelText: '{attr.name.capitalize()}',
-                  hintText: 'Ingrese {attr.name}',
+                  labelText: '{label}',
+                  hintText: '{hint}',
                 ),
                 validator: (val) {{
                   {validator_logic}
@@ -2182,6 +1590,7 @@ class _DetailTile extends StatelessWidget {{
         controllers_dispose_str = "\n".join(controllers_dispose)
         form_fields_str = "\n".join(form_fields_widgets)
         model_construction_str = "\n".join(model_construction_fields)
+        required_date_checks_str = "\n".join(required_date_checks)
         has_date = any(self._dart_type(a.type) == "DateTime" for a in cls.attributes)
         intl_import = "import 'package:intl/intl.dart';\n" if has_date else ""
 
@@ -2219,6 +1628,7 @@ class _{cls.name}FormScreenState extends State<{cls.name}FormScreen> {{
 
   Future<void> _save() async {{
     if (!_formKey.currentState!.validate()) return;
+{required_date_checks_str}
 
     setState(() => _isSaving = true);
 
@@ -2260,16 +1670,32 @@ class _{cls.name}FormScreenState extends State<{cls.name}FormScreen> {{
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEdit ? 'Editar {cls.name}' : 'Nuevo {cls.name}'),
+        title: Text(isEdit ? 'Editar {self._humanize_name(cls.name)}' : 'Nuevo registro'),
       ),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            Container(
+              padding: const EdgeInsets.all(20), margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withOpacity(.10), borderRadius: BorderRadius.circular(20)),
+              child: Row(children: [
+                Icon(isEdit ? Icons.edit_note_rounded : Icons.note_add_outlined, size: 30, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('{self._humanize_name(cls.name)}', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4), const Text('Completa la información. Los campos con * son obligatorios.', style: TextStyle(fontSize: 12)),
+                ])),
+              ]),
+            ),
             {form_fields_str}
-            const SizedBox(height: 24),
-            FilledButton.icon(
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        child: FilledButton.icon(
               style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
               icon: _isSaving
                   ? const SizedBox(
@@ -2279,12 +1705,10 @@ class _{cls.name}FormScreenState extends State<{cls.name}FormScreen> {{
                     )
                   : const Icon(Icons.save),
               label: Text(
-                _isSaving ? 'Guardando...' : (isEdit ? 'Actualizar {cls.name}' : 'Crear {cls.name}'),
+                _isSaving ? 'Guardando…' : (isEdit ? 'Guardar cambios' : 'Crear registro'),
                 style: const TextStyle(fontSize: 16),
               ),
               onPressed: _isSaving ? null : _save,
-            ),
-          ],
         ),
       ),
     );
@@ -2293,14 +1717,8 @@ class _{cls.name}FormScreenState extends State<{cls.name}FormScreen> {{
 """
 
     def _generate_widget_test(self) -> str:
-        return f"""import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/material.dart';
-import 'package:{self.app_name}/main.dart';
-
-void main() {{
-  testWidgets('Carga inicial de la aplicación {self.raw_app_name}', (WidgetTester tester) async {{
-    await tester.pumpWidget(const UMLGeneratedApp());
-    expect(find.byType(MaterialApp), findsOneWidget);
-  }});
-}}
-"""
+        first = self._humanize_name(self.entities[0].name) if self.entities else ''
+        return (self._mobile_template('flutter_widget_test.dart')
+                .replace('__PACKAGE__', self.app_name)
+                .replace('__FIRST_MODULE__', self._dart_string(first))
+                .replace('__HAS_MODULES__', 'true' if self.entities else 'false'))

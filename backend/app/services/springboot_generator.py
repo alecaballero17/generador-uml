@@ -118,7 +118,8 @@ class SpringBootGenerator:
 
     def __init__(self, diagram: UMLDiagram, base_package: str = "com.generated.app",
                  output_dir: str = "generated-springboot"):
-        self.diagram = diagram
+        from ..models.association_classes import normalize_association_classes
+        self.diagram = normalize_association_classes(diagram)
         self.base_package = base_package
         self.output_dir = output_dir
         self.package_path = base_package.replace(".", "/")
@@ -176,6 +177,17 @@ class SpringBootGenerator:
         # Application properties
         files["src/main/resources/application.properties"] = self._generate_application_properties()
         files["src/main/resources/application-dev.properties"] = self._generate_dev_properties()
+        files["src/main/resources/application-demo.properties"] = """# Local persistent database for an offline demonstration.
+spring.datasource.url=jdbc:h2:file:./data/demo;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+spring.datasource.driver-class-name=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect
+spring.jpa.hibernate.ddl-auto=update
+spring.sql.init.mode=never
+server.address=127.0.0.1
+"""
         files["src/test/resources/application-test.properties"] = "spring.datasource.url=jdbc:h2:mem:uml;DB_CLOSE_DELAY=-1\nspring.datasource.driver-class-name=org.h2.Driver\nspring.datasource.username=sa\nspring.datasource.password=\nspring.jpa.database-platform=org.hibernate.dialect.H2Dialect\nspring.jpa.hibernate.ddl-auto=create-drop\n"
 
         # Database schema SQL (PostgreSQL DDL)
@@ -286,7 +298,7 @@ class SpringBootGenerator:
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
-            <scope>test</scope>
+            <scope>runtime</scope>
         </dependency>
 
         <!-- Test -->

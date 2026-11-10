@@ -1318,3 +1318,83 @@ input, button, select, textarea {
     gap: var(--space-md);
     justify-content: flex-end;
 }
+
+/* Review text and native dialogs must remain readable in the dark editor. */
+#photoReview textarea, #photoResult textarea, .modal textarea,
+dialog input, dialog select, dialog textarea {
+    background: var(--bg-secondary, #202031);
+    color: var(--text-primary, #f0f0fa);
+    border: 1px solid var(--border-color, #656580);
+    border-radius: 6px;
+    padding: 8px;
+}
+dialog {
+    background: var(--bg-secondary, #202031);
+    color: var(--text-primary, #f0f0fa);
+    border: 1px solid var(--border-color, #656580);
+    border-radius: 12px;
+    padding: 20px;
+    max-width: min(90vw, 700px);
+    max-height: 85vh;
+    overflow: auto;
+}
+dialog::backdrop { background: #0009; }
+
+/* Shared assistant: persistent conversation above a clearly separated composer. */
+#teamChatDialog { width: min(920px, calc(100vw - 32px)); max-width: none; max-height: 92dvh; padding: 0; margin: auto; overflow: auto; border: 1px solid #555079; border-radius: 22px; background: #151521; color: #eeeef7; box-shadow: 0 24px 90px #0009; }
+#teamChatDialog[open] { display: flex; flex-direction: column; }
+#teamChatDialog::backdrop { background: #080813b8; backdrop-filter: blur(5px); }
+#teamChatDialog .team-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 24px 28px; background: linear-gradient(120deg, #292344, #171725); border-bottom: 1px solid #38334e; }
+.team-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .15em; color: #b8a1ff; }
+#teamTitle { font-size: 27px; margin: 7px 0; }
+.team-header p, .team-help { color: #b4b2c9; font-size: 13px; margin: 0; }
+.team-identity { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 14px 28px; border-bottom: 1px solid #302d42; font-size: 13px; }
+#teamActor { width: 260px; max-width: 100%; padding: 10px 12px; border-radius: 10px; }
+.team-identity span { color: #9693ad; font-size: 12px; }
+.team-timeline { min-height: 180px; overflow-y: auto; flex: 1 1 auto; padding: 20px 28px; background: #11111c; }
+#teamMessages:empty { display: none; }
+#teamMessages:not(:empty) + .team-empty { display: none; }
+.team-empty { text-align: center; max-width: 510px; margin: 12px auto; color: #b4b2c9; line-height: 1.6; }
+.team-empty h3 { color: #eeebff; margin: 8px 0; font-size: 20px; }
+.team-empty p { margin: 8px 0; }
+.team-empty > span:last-child { font-size: 12px; color: #a494d4; }
+.team-spark { font-size: 32px; color: #ba9cff; }
+.team-composer { padding: 20px 28px; border-top: 1px solid #38334e; }
+.team-composer > label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 9px; }
+#teamMessage { display: block; width: 100%; box-sizing: border-box; resize: vertical; min-height: 85px; max-height: 180px; padding: 13px; border-radius: 12px; line-height: 1.5; }
+#teamMessage:focus, #teamActor:focus { outline: 2px solid #a78bfa; outline-offset: 2px; }
+.team-actions, .team-extras { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+#teamChatDialog button { cursor: pointer; padding: 10px 14px; border-radius: 10px; font-size: 13px; }
+#teamChatDialog button:disabled { opacity: .55; cursor: wait; }
+.team-help { margin-top: 12px; line-height: 1.5; }
+.team-extras { justify-content: space-between; }
+.team-extras label { display: flex; gap: 8px; align-items: center; font-size: 12px; color: #b4b2c9; }
+#teamStatus { font-size: 13px; color: #c9baff; margin: 10px 0 0; }
+.team-entry { padding: 16px; border: 1px solid #353247; border-radius: 14px; margin-bottom: 12px; background: #20202e; }
+.team-entry[data-kind="answer"] { border-color: #66528f; background: #282039; }
+.team-entry-meta { display: flex; justify-content: space-between; gap: 12px; color: #b7a6df; font-size: 12px; margin-bottom: 8px; }
+.team-entry-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; font-size: 14px; }
+.team-entry button { margin-top: 10px; }
+.team-entry details { margin-top: 12px; font-size: 12px; }
+.team-entry pre { overflow-wrap: anywhere; }
+/* Keep the conversation tall: writing controls occupy their own side panel. */
+#teamChatDialog { width: min(1280px, calc(100vw - 32px)); height: 90dvh; overflow: hidden; }
+#teamChatDialog[open] { display: grid; grid-template-columns: minmax(0, 1fr) 350px; grid-template-rows: auto auto minmax(0, 1fr); }
+#teamChatDialog .team-header { grid-column: 1 / -1; padding: 14px 24px; }
+#teamChatDialog .team-identity { grid-column: 1 / -1; padding: 10px 24px; }
+#teamChatDialog .team-timeline { min-height: 0; padding: 20px; overscroll-behavior: contain; }
+#teamChatDialog .team-composer { min-height: 0; overflow-y: auto; padding: 20px; border-top: 0; border-left: 1px solid #38334e; }
+#teamChatDialog .team-actions { flex-direction: column; align-items: stretch; }
+#teamChatDialog .team-extras { gap: 18px; }
+#teamChatDialog #teamMessage { min-height: 120px; }
+#teamChatDialog #teamNameError { color: #ffb4b4; font-weight: 600; }
+#teamChatDialog #teamActor[aria-invalid="true"] { border: 2px solid #ff8989; }
+@media (max-width: 760px) {
+    #teamChatDialog[open] { display: block; overflow-y: auto; }
+    #teamChatDialog .team-header, #teamChatDialog .team-identity, #teamChatDialog .team-timeline, #teamChatDialog .team-composer { padding: 16px; }
+    #teamChatDialog .team-timeline { overflow: visible; min-height: 220px; }
+    #teamChatDialog .team-composer { overflow: visible; border-left: 0; border-top: 1px solid #38334e; }
+}
+/* APK: etapas reales, resultado y descarga separados del código fuente. */
+.apk-build-card{padding:22px;margin:0 0 22px;border:1px solid #665095;border-radius:16px;background:linear-gradient(125deg,#28213c,#1c1b29)}
+.apk-build-heading{display:flex;gap:12px;align-items:flex-start}.apk-build-heading>div{flex:1;min-width:0}.apk-build-heading h3{font-size:18px;margin:0 0 6px;color:#f3edff}.apk-build-heading p{font-size:13px;line-height:1.5;color:#c9bfdc;margin:0}.apk-build-icon{font-size:24px;color:#be9aff;line-height:1.3}.apk-step-count{font-size:12px;white-space:nowrap;padding:5px 9px;background:#8d6acd26;border-radius:20px;color:#d7c3ff}.apk-build-card progress{display:block;width:100%;height:10px;margin:20px 0 10px;border:0;border-radius:8px;overflow:hidden;background:#3b334d;accent-color:#b38aff}.apk-build-card progress::-webkit-progress-bar{background:#3b334d;border-radius:8px}.apk-build-card progress::-webkit-progress-value{background:linear-gradient(90deg,#8c7aff,#c48bfa);border-radius:8px;transition:width .4s}.apk-build-card[data-state="running"] progress{animation:apk-pulse 1.6s ease-in-out infinite}.apk-build-hint{font-size:12px;color:#bfb3d0;line-height:1.6;margin:0 0 16px}.apk-build-stages{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;list-style:none;padding:0;margin:0 0 16px}.apk-build-stages li{font-size:12px;color:#a49aaf;display:flex;align-items:center;gap:8px;line-height:1.4}.apk-build-stages li>span{width:21px;height:21px;display:grid;place-items:center;border:1px solid #53495f;border-radius:50%;flex-shrink:0;font-size:10px}.apk-build-stages li.done{color:#a7dfcd}.apk-build-stages li.done>span{background:#1e493d;border-color:#417f6a}.apk-build-stages li.current{color:#e6d6ff;font-weight:600}.apk-build-stages li.current>span{background:#715092;border-color:#b48be1}.apk-build-downloads{display:flex;flex-wrap:wrap;gap:10px}.apk-build-downloads a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:12px 16px;text-decoration:none;border-radius:10px;font-size:13px}.apk-build-downloads a:first-child{background:#8968d6;color:white;border:1px solid #b498ed;font-weight:700}.apk-download-status{font-size:12px;line-height:1.6;color:#b4dacd;margin:12px 0 0}.apk-build-details{margin-top:15px;border-top:1px solid #ffffff14;padding-top:12px}.apk-build-details summary{cursor:pointer;color:#b5a6c8;font-size:12px}.apk-build-details pre{max-height:230px;overflow:auto;white-space:pre-wrap;font:11px/1.6 monospace;color:#c6c4d3;background:#12121b;border-radius:8px;padding:12px;overflow-wrap:anywhere}.apk-build-card[data-state="succeeded"]{border-color:#3d9279;background:linear-gradient(125deg,#19342f,#1b222c)}.apk-build-card[data-state="succeeded"] .apk-build-icon{color:#89e4bd}.apk-build-card[data-state="failed"],.apk-build-card[data-state="interrupted"]{border-color:#b65e75}.apk-build-card[data-state="failed"] .apk-build-icon,.apk-build-card[data-state="interrupted"] .apk-build-icon{color:#ff9bb1}@keyframes apk-pulse{50%{opacity:.55}}@media(prefers-reduced-motion:reduce){.apk-build-card[data-state="running"] progress{animation:none}}@media(max-width:550px){.apk-build-card{padding:16px}.apk-build-stages{grid-template-columns:1fr}.apk-step-count{font-size:10px}}

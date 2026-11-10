@@ -125,3 +125,23 @@ assert(svgResult.fullSvg.includes('arrowClosed'), 'SVG debe contener definicione
 assert(svgResult.hasExportPNG === true, 'Función exportDiagramPNG debe estar definida en app.js');
 
 console.log('✓ Pruebas de exportación PlantUML, Mermaid, SVG y PNG aprobadas correctamente.');
+const undirected = vm.runInContext(`(() => {
+  const plain = new UMLModel();
+  const a = new UMLClassNode('Origen'), b = new UMLClassNode('Destino');
+  plain.addClass(a); plain.addClass(b);
+  const link = new UMLRelNode('association', a.id, b.id);
+  link.source.multiplicity = null; link.target.multiplicity = null;
+  link.source.navigable = false; link.target.navigable = false;
+  plain.addRelationship(link);
+  return {plantuml:generatePlantUML(plain), mermaid:generateMermaid(plain)};
+})()`, ctx);
+assert(undirected.plantuml.includes('Origen -- Destino'), 'Asociación sin navegación no debe adquirir flecha ni multiplicidades en PlantUML');
+assert(undirected.mermaid.includes('Origen -- Destino'), 'Asociación sin navegación debe conservarse en Mermaid');
+const linked=vm.runInContext(`(()=>{
+ const m=new UMLModel();for(const name of ['Venta','Producto','Detalle']){const c=new UMLClassNode(name);c.id=name;m.addClass(c);}
+ const r=new UMLRelNode('association','Venta','Producto');r.associationClassId='Detalle';r.source.multiplicity='*';r.target.multiplicity='1..*';r.target.navigable=false;m.addRelationship(r);
+ return {p:generatePlantUML(m),m:generateMermaid(m)};
+})()`,ctx);
+assert(linked.p.includes('(Venta, Producto) .. Detalle'));
+assert(linked.m.includes('Venta "1" -- "1..*" Detalle'));
+assert(!linked.m.includes('Venta "*" -- "1..*" Producto'));

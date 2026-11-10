@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import httpx
@@ -73,9 +74,13 @@ DEBES responder SIEMPRE en formato JSON estricto con esta estructura:
 """
 
 class GeminiAssistant:
+    _last_working_model = None
+    _unavailable_models = set()
+
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or _load_env_key()
-        self.models_to_try = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-3-flash-preview", "gemini-2.5-flash-lite"]
+        preferred = os.environ.get('GEMINI_ASSISTANT_MODEL', 'gemini-3-flash-preview').strip()
+        self.models_to_try = list(dict.fromkeys([preferred or 'gemini-3-flash-preview', 'gemini-2.5-flash-lite', 'gemini-flash-latest']))
 
     async def converse(self, message: str, current_diagram: Optional[Dict[str, Any]] = None, history: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
         if not self.api_key:
@@ -126,9 +131,14 @@ class GeminiAssistant:
             }
         }
 
+        models = [m for m in self.models_to_try if m not in self._unavailable_models]
+        if self._last_working_model in models:
+            models.remove(self._last_working_model)
+            models.insert(0, self._last_working_model)
         async with httpx.AsyncClient(timeout=25.0) as client:
             last_err = None
-            for model_name in self.models_to_try:
+            for model_name in models:
+                started = time.monotonic()
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
                 try:
                     response = await client.post(url, json=payload, headers={"x-goog-api-key": self.api_key})
@@ -139,14 +149,20 @@ class GeminiAssistant:
                             parts = candidates[0].get("content", {}).get("parts", [])
                             if parts and "text" in parts[0]:
                                 parsed = json.loads(parts[0]["text"])
+                                type(self)._last_working_model = model_name
+                                logger.info('AI model=%s duration=%.2fs status=ok', model_name, time.monotonic() - started)
                                 return {
                                     "spoken_response": parsed.get("spoken_response", "Entendido, he actualizado el diagrama."),
                                     "actions": parsed.get("actions", []),
                                     "model_used": model_name
                                 }
                     else:
+                        if response.status_code == 404:
+                            self._unavailable_models.add(model_name)
+                        logger.warning('AI model=%s duration=%.2fs status=%s', model_name, time.monotonic() - started, response.status_code)
                         last_err = f"Status {response.status_code}: {response.text[:200]}"
                 except Exception as e:
+                    logger.warning('AI model=%s duration=%.2fs error=%s', model_name, time.monotonic() - started, type(e).__name__)
                     last_err = type(e).__name__
                     continue
 

@@ -24,7 +24,7 @@ class UMLModel {
     removeClass(id) {
         this.classes = this.classes.filter(c => c.id !== id);
         this.relationships = this.relationships.filter(
-            r => r.source.classId !== id && r.target.classId !== id
+            r => r.source.classId !== id && r.target.classId !== id && r.associationClassId !== id
         );
     }
     getClass(id) { return this.classes.find(c => c.id === id); }
@@ -128,6 +128,7 @@ class UMLRelNode {
         this.name = null;
         this.label = null;
         this.vertices = [];
+        this.associationClassId = null;
     }
 
     toJSON() {
@@ -137,6 +138,7 @@ class UMLRelNode {
             target: { ...this.target },
             name: this.name, label: this.label,
             vertices: this.vertices.map(v => ({ ...v })),
+            ...(this.associationClassId ? {associationClassId:this.associationClassId} : {}),
         };
     }
 
@@ -148,6 +150,7 @@ class UMLRelNode {
         rel.name = data.name || null;
         rel.label = data.label || null;
         rel.vertices = (data.vertices || []).map(v => ({ ...v }));
+        rel.associationClassId = data.associationClassId || null;
         return rel;
     }
 }
@@ -444,7 +447,7 @@ function renderRelationship(rel) {
 
     switch (rel.type) {
         case 'association':
-            markerEnd = 'url(#arrowOpen)';
+            if (rel.target.navigable !== false) markerEnd = 'url(#arrowOpen)';
             break;
         case 'aggregation':
             markerStart = 'url(#diamondEmpty)';
@@ -488,6 +491,17 @@ function renderRelationship(rel) {
     const angle = Math.atan2(tp.y - sp.y, tp.x - sp.x);
     const offsetX = Math.sin(angle) * 14;
     const offsetY = -Math.cos(angle) * 14;
+
+    const associationClass = rel.associationClassId && state.model.getClass(rel.associationClassId);
+    if (associationClass) {
+        const center = getClassCenter(associationClass);
+        const dx = midX - center.x, dy = midY - center.y;
+        const factor = Math.min(dx ? associationClass.size.width / 2 / Math.abs(dx) : Infinity,
+            dy ? associationClass.size.height / 2 / Math.abs(dy) : Infinity, 1);
+        g.appendChild(svgEl('line', {class:'association-class-connector', x1:midX, y1:midY,
+            x2:center.x + dx * factor, y2:center.y + dy * factor,
+            stroke:'#baa1e3', 'stroke-width':1.8, 'stroke-dasharray':'7 5'}));
+    }
 
     if (rel.source.multiplicity && rel.type !== 'generalization' && rel.type !== 'realization') {
         const smult = svgEl('text', {
@@ -608,9 +622,11 @@ function updatePropertiesPanel() {
         $('#propRelType').value = rel.type;
         $('#propRelName').value = rel.name || '';
         $('#propRelSourceRole').value = rel.source.role || '';
-        $('#propRelSourceMult').value = rel.source.multiplicity || '1';
+        $('#propRelSourceMult').value = rel.source.multiplicity || '';
         $('#propRelTargetRole').value = rel.target.role || '';
-        $('#propRelTargetMult').value = rel.target.multiplicity || '0..*';
+        $('#propRelTargetMult').value = rel.target.multiplicity || '';
+        $('#propRelNavigation').value = rel.target.navigable === false ? 'none' : 'target';
+        $('#propRelNavigation').disabled = rel.type !== 'association';
     }
 }
 
@@ -870,6 +886,12 @@ canvasContainer.addEventListener('mouseup', (e) => {
         if (target && target.dataset.id !== state.relSource) {
             saveUndo();
             const rel = new UMLRelNode(state.activeTool, state.relSource, target.dataset.id);
+            rel.source.multiplicity = null;
+            rel.target.multiplicity = null;
+            if (rel.type === 'association') {
+                rel.source.navigable = false;
+                rel.target.navigable = false;
+            }
             state.model.addRelationship(rel);
             state.selectedId = rel.id;
             state.selectedType = 'relationship';
@@ -1013,7 +1035,7 @@ $('#propRelSourceRole').addEventListener('input', (e) => {
 $('#propRelSourceMult').addEventListener('change', (e) => {
     saveUndo();
     const rel = state.model.relationships.find(r => r.id === state.selectedId);
-    if (rel) { rel.source.multiplicity = e.target.value; renderAll(); }
+    if (rel) { rel.source.multiplicity = e.target.value || null; renderAll(); }
 });
 
 $('#propRelTargetRole').addEventListener('input', (e) => {
@@ -1024,7 +1046,16 @@ $('#propRelTargetRole').addEventListener('input', (e) => {
 $('#propRelTargetMult').addEventListener('change', (e) => {
     saveUndo();
     const rel = state.model.relationships.find(r => r.id === state.selectedId);
-    if (rel) { rel.target.multiplicity = e.target.value; renderAll(); }
+    if (rel) { rel.target.multiplicity = e.target.value || null; renderAll(); }
+});
+
+$('#propRelNavigation').addEventListener('change', (e) => {
+    const rel = state.model.relationships.find(r => r.id === state.selectedId);
+    if (!rel || rel.type !== 'association') return;
+    saveUndo();
+    rel.source.navigable = false;
+    rel.target.navigable = e.target.value === 'target';
+    renderAll();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1214,12 +1245,123 @@ $('#btnCloseValidation').addEventListener('click', () => {
 // Code Generation
 // ═══════════════════════════════════════════════════════════════════════════
 
+let apkPollTimer;
+const apkBuildStages = [
+    ['Generando', 'Generar código'],
+    ['Compilando y probando backend', 'Compilar y probar backend'],
+    ['Resolviendo', 'Preparar Flutter'],
+    ['Probando interfaz', 'Probar aplicación móvil'],
+    ['Compilando APK', 'Compilar APK Android'],
+    ['Empaquetando', 'Preparar descarga'],
+];
+function renderApkBuild(job) {
+    const card = $('#apkBuildCard');
+    card.classList.remove('hidden'); card.dataset.state = job.state;
+    const index = apkBuildStages.findIndex(([prefix]) => (job.stage || '').startsWith(prefix));
+    const finished = job.state === 'succeeded';
+    const running = job.state === 'running';
+    $('#apkBuildTitle').textContent = finished ? '¡Tu APK está lista!' : running ? 'Creando tu APK' : job.state === 'interrupted' ? 'Compilación interrumpida' : 'No se pudo crear la APK';
+    $('#apkBuildIcon').textContent = finished ? '✓' : running ? '◌' : '!';
+    $('#apkBuildStatus').textContent = finished ? 'Backend y APK compilados correctamente.' : job.message || job.stage;
+    const progress = $('#apkBuildProgress');
+    if (index < 0 && running) progress.removeAttribute('value');
+    else progress.value = finished ? 6 : Math.max(0, index);
+    $('#apkBuildStep').textContent = finished ? '6 de 6' : index >= 0 ? `Etapa ${index + 1} de 6` : running ? 'Iniciando' : 'Detenida';
+    $('#apkBuildHint').textContent = finished
+        ? '1. Descarga la APK.  2. Instálala en tu teléfono.  3. Conéctala al backend para usar el CRUD. La instalación todavía no se ha realizado.'
+        : running ? 'La barra avanza al completar cada etapa. La compilación Android puede tardar varios minutos; no hace falta pulsar otra vez.'
+        : 'La APK no está lista para descargar. Revisa el registro técnico antes de iniciar otro intento.';
+    $('#apkBuildStages').replaceChildren(...apkBuildStages.map(([, label], step) => {
+        const row = document.createElement('li'), icon = document.createElement('span');
+        const done = finished || (index >= 0 && step < index);
+        row.className = done ? 'done' : running && step === index ? 'current' : '';
+        icon.textContent = done ? '✓' : String(step + 1);
+        row.append(icon, document.createTextNode(label));
+        if (running && step === index) row.setAttribute('aria-current', 'step');
+        return row;
+    }));
+    if (running) {
+        $('#genProgress').classList.add('hidden');
+        $('#genResults').classList.add('hidden');
+    }
+    $('#btnBuildApk').textContent = running ? 'Compilando APK…' : 'Generar y compilar APK (local)';
+    $('#btnBuildApk').disabled = running;
+    $('#btnStartGeneration').disabled = running;
+}
+async function watchApkBuild(id) {
+    clearTimeout(apkPollTimer);
+    const button = $('#btnBuildApk');
+    button.disabled = true;
+    try {
+        const response = await umlApiFetch(`/api/builds/${id}`);
+        const job = await response.json();
+        if (!response.ok) throw new Error(typeof job.detail === 'string' ? job.detail : 'No se pudo consultar la compilación');
+        renderApkBuild(job);
+        $('#apkBuildLog').textContent = job.log || '';
+        if (job.state === 'running') {
+            apkPollTimer = setTimeout(() => watchApkBuild(id), 3000);
+            return;
+        }
+        button.disabled = false;
+        localStorage.setItem('uml-last-build', id);
+        localStorage.removeItem('uml-active-build');
+        if (job.state === 'succeeded') {
+            const downloads = $('#apkBuildDownloads');
+            downloads.replaceChildren();
+            for (const [kind, label] of [['apk', 'Descargar APK'], ['zip', 'Descargar entrega y código']]) {
+                const link = document.createElement('a');
+                link.href = `/api/builds/${id}/artifact/${kind}`;
+                link.download = kind === 'apk' ? 'aplicacion.apk' : 'entrega.zip';
+                link.textContent = label;
+                link.className = 'btn-secondary';
+                link.addEventListener('click', () => {
+                    $('#apkDownloadStatus').textContent = kind === 'apk'
+                        ? 'Descarga de APK solicitada. Comprueba su finalización en Descargas del navegador. El teléfono todavía requiere instalación.'
+                        : 'Descarga del código y la entrega solicitada. Comprueba su finalización en el navegador.';
+                });
+                downloads.append(link);
+            }
+        }
+    } catch (error) {
+        $('#apkBuildCard').classList.remove('hidden');
+        $('#apkBuildTitle').textContent = 'Reconectando con la compilación';
+        $('#apkBuildStatus').textContent = `No se pudo consultar: ${error.message}. Reintentando automáticamente…`;
+        $('#apkBuildHint').textContent = 'No se inició otra compilación. Se recuperará el resultado de este mismo proceso.';
+        // Keep the job identifier and do not offer another build while its state is unknown.
+        apkPollTimer = setTimeout(() => watchApkBuild(id), 5000);
+    }
+}
+
+$('#btnBuildApk').addEventListener('click', async () => {
+    clearTimeout(apkPollTimer);
+    renderApkBuild({state:'running', stage:'Preparación', message:'Preparando el proyecto para compilar…'});
+    $('#btnBuildApk').disabled = true;
+    $('#apkBuildDownloads').replaceChildren();
+    $('#apkBuildLog').textContent = '';
+    $('#apkDownloadStatus').textContent = '';
+    $('#apkBuildStatus').textContent = 'Preparando compilación local…';
+    try {
+        const response = await umlApiFetch('/api/builds', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({diagram: state.model.toJSON(), basePackage: $('#genPackage').value}),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : JSON.stringify(result.detail));
+        localStorage.setItem('uml-active-build', result.id);
+        watchApkBuild(result.id);
+    } catch (error) {
+        renderApkBuild({state:'failed', message:error.message});
+    }
+});
+
 $('#btnGenerateCode').addEventListener('click', showGeneratePanel);
 $('#tabGenerate').addEventListener('click', showGeneratePanel);
 
 function showGeneratePanel() {
     const panel = $('#generatePanel');
     panel.classList.remove('hidden');
+    const activeBuild = new URLSearchParams(location.search).get('build') || localStorage.getItem('uml-active-build') || localStorage.getItem('uml-last-build');
+    if (activeBuild && /^[a-f0-9]{32}$/.test(activeBuild)) watchApkBuild(activeBuild);
 
     // Update stats
     let totalAttrs = 0, totalOps = 0;
@@ -1235,6 +1377,11 @@ function showGeneratePanel() {
 
 $('#btnCloseGenerate').addEventListener('click', () => {
     $('#generatePanel').classList.add('hidden');
+    const editorUrl = new URL(location.href);
+    if (editorUrl.searchParams.has('build')) {
+        editorUrl.searchParams.delete('build');
+        history.replaceState(null, '', editorUrl.href);
+    }
 });
 
 $('#btnStartGeneration').addEventListener('click', async () => {
@@ -1576,11 +1723,13 @@ function generatePlantUML(model) {
         const src = model.getClass(rel.source.classId);
         const tgt = model.getClass(rel.target.classId);
         if (src && tgt) {
-            const sym = relSymbols[rel.type] || '-->';
+            const sym = rel.type === 'association' && rel.target.navigable === false ? '--' : relSymbols[rel.type] || '-->';
             const hasMult = ['association', 'aggregation', 'composition'].includes(rel.type);
             const srcMult = (hasMult && rel.source.multiplicity) ? ` "${rel.source.multiplicity}"` : "";
             const tgtMult = (hasMult && rel.target.multiplicity) ? ` "${rel.target.multiplicity}"` : "";
             puml += `${src.name}${srcMult} ${sym}${tgtMult} ${tgt.name}\n`;
+            const linked=rel.associationClassId && model.getClass(rel.associationClassId);
+            if(linked)puml += `(${src.name}, ${tgt.name}) .. ${linked.name}\n`;
         }
     }
 
@@ -1625,7 +1774,16 @@ function generateMermaid(model) {
         const src = model.getClass(rel.source.classId);
         const tgt = model.getClass(rel.target.classId);
         if (src && tgt) {
-            const sym = relSymbols[rel.type] || '-->';
+            if(rel.associationClassId){
+                const linked=model.getClass(rel.associationClassId);
+                if(linked){
+                    mmd+=`  %% Clase de asociación ${linked.name}: representación mediante clase intermedia\n`;
+                    mmd+=`  ${src.name} "1" -- "${rel.target.multiplicity}" ${linked.name}\n`;
+                    mmd+=`  ${tgt.name} "1" -- "${rel.source.multiplicity}" ${linked.name}\n`;
+                    continue;
+                }
+            }
+            const sym = rel.type === 'association' && rel.target.navigable === false ? '--' : relSymbols[rel.type] || '-->';
             const hasMult = ['association', 'aggregation', 'composition'].includes(rel.type);
             const srcMult = (hasMult && rel.source.multiplicity) ? ` "${rel.source.multiplicity}"` : "";
             const tgtMult = (hasMult && rel.target.multiplicity) ? ` "${rel.target.multiplicity}"` : "";
@@ -1911,8 +2069,63 @@ function parseVoiceCommand(text) {
 // Photo Import & Vision Interpretation
 // ═══════════════════════════════════════════════════════════════════════════
 
+function setPhotoStudioStage(stage) {
+    $('#photoModal').dataset.stage = stage;
+    const current = stage === 'review' ? 2 : stage === 'ready' || stage === 'reading' ? 1 : 0;
+    $$('[data-photo-step]').forEach((step, index) => {
+        step.classList.toggle('done', index < current);
+        if (index === current) step.setAttribute('aria-current', 'step');
+        else step.removeAttribute('aria-current');
+    });
+    $('#photoWelcome').classList.toggle('hidden', stage === 'reading' || stage === 'review');
+    $('#photoReadProgress').classList.toggle('hidden', stage !== 'reading');
+}
+function setPhotoReadProgress(message) {
+    $('#photoReadStatus').textContent = message;
+}
+function renderPhotoDraftCards() {
+    const container = $('#photoClassCards');
+    try {
+        const plans = reviewPhotoText($('#webPhotoText').value);
+        if (!plans.length) throw new Error('Agrega al menos una clase con un nombre válido.');
+        container.replaceChildren(...plans.map(plan => {
+            const card = document.createElement('article'); card.className = 'photo-class-card';
+            const name = document.createElement('h5'); name.textContent = plan.name;
+            const symbol = document.createElement('span'); symbol.textContent = '◇'; symbol.setAttribute('aria-hidden', 'true');
+            name.prepend(symbol); card.append(name);
+            for (const attr of plan.attributes) {
+                const row = document.createElement('div'), key = document.createElement('span'), type = document.createElement('code');
+                key.textContent = attr.name; type.textContent = attr.type; row.append(key, type); card.append(row);
+            }
+            for (const op of plan.operations || []) { const row = document.createElement('div'); row.textContent = `${op.name}()`; card.append(row); }
+            if (!plan.attributes.length && !plan.operations?.length) { const empty = document.createElement('small'); empty.textContent = 'Sin campos detectados'; card.append(empty); }
+            return card;
+        }));
+        const stats = $('#photoReviewStats');
+        const connections = state.detectedPhotoConnections?.connections?.length || 0;
+        stats.replaceChildren(...[[plans.length, 'Clases'], [plans.reduce((sum,p) => sum+p.attributes.length, 0), 'Atributos'], [connections, 'Conexiones propuestas']].map(([count,label]) => {
+            const item = document.createElement('div'), value = document.createElement('strong'), caption = document.createElement('span');
+            value.textContent = count; caption.textContent = label; item.append(value,caption); return item;
+        }));
+        $('#photoDraftError').textContent = '';
+        $('#btnAcceptPhotoDiagram').disabled = false;
+    } catch (error) {
+        $('#photoDraftError').textContent = error.message;
+        $('#btnAcceptPhotoDiagram').disabled = true;
+    }
+}
+$('#webPhotoText').addEventListener('input', renderPhotoDraftCards);
+$('#photoImportMode').addEventListener('change', () => {
+    const replace = $('#photoImportMode').value === 'replace';
+    $('#photoImportExplanation').textContent = replace
+        ? 'Reemplazará todas las clases y relaciones del lienzo. Puedes recuperar el contenido anterior con Deshacer.'
+        : 'Conserva las clases y relaciones existentes y agrega las de esta imagen.';
+    $('#photoImportExplanation').classList.toggle('replace-warning', replace);
+});
+$('#btnChangePhoto').addEventListener('click', () => $('#photoInput').click());
 $('#btnPhoto').addEventListener('click', () => {
     $('#photoModal').classList.remove('hidden');
+    if (!state.pendingPhotoFile) setPhotoStudioStage('upload');
 });
 
 $('#btnClosePhoto').addEventListener('click', () => {
@@ -1936,8 +2149,15 @@ $('#photoInput').addEventListener('change', (e) => {
 });
 
 function handlePhotoFile(file) {
+    if ($('#btnProcessPhoto').disabled) return;
+    if (!file.type.startsWith('image/')) { showToast('Selecciona un archivo de imagen.', 'warning'); return; }
     state.pendingPhotoFile = file;
+    state.detectedDiagram = null;
+    state.detectedPhotoConnections = null;
+    $('#photoReadError').classList.add('hidden');
+    $('#photoInput').value = '';
     document.getElementById('photoImportMode').value='append';
+    $('#photoImportMode').dispatchEvent(new Event('change'));
     const reader = new FileReader();
     reader.onload = (e) => {
         $('#photoImage').src = e.target.result;
@@ -1945,6 +2165,11 @@ function handlePhotoFile(file) {
         $('#photoActions').classList.remove('hidden');
         $('#photoReviewContainer').classList.add('hidden');
         dropzone.classList.add('hidden');
+        $('#btnChangePhoto').classList.remove('hidden');
+        $('#photoFileName').textContent = file.name;
+        $('#photoFileName').title = file.name;
+        $('#photoFileSize').textContent = file.size >= 1048576 ? `${(file.size / 1048576).toFixed(1)} MB` : `${Math.ceil(file.size / 1024)} KB`;
+        setPhotoStudioStage('ready');
     };
     reader.readAsDataURL(file);
 }
@@ -1957,7 +2182,13 @@ $('#btnProcessPhoto').addEventListener('click', async () => {
 
     const btn = $('#btnProcessPhoto');
     btn.disabled = true;
-    btn.textContent = '⌛ Interpretando con Visión Artificial...';
+    btn.textContent = 'Leyendo imagen…';
+    $('#btnChangePhoto').disabled = true;
+    $('#photoUseVision').disabled = true;
+    $('#photoReadError').classList.add('hidden');
+    $('#photoReviewContainer').classList.add('hidden');
+    setPhotoStudioStage('reading');
+    setPhotoReadProgress('Preparando el lector de imágenes…');
     showToast('Procesando imagen con Visión por Computadora y OCR...', 'info');
 
     try {
@@ -1980,14 +2211,13 @@ $('#btnProcessPhoto').addEventListener('click', async () => {
         reviewContainer.classList.remove('hidden');
 
         const badge = $('#photoConfidenceBadge');
-        const confPercent = Math.round((result.confidence || 0.75) * 100);
-        badge.textContent = 'Lectura local: requiere revisión';
-        badge.className = `confidence-badge ${confPercent < 70 ? 'warning' : ''}`;
+        badge.textContent = photo.source === 'vision' ? 'IA en línea · revisa el borrador' : 'Lectura local · revisa el borrador';
+        badge.className = 'confidence-badge';
 
         const stats = $('#photoReviewStats');
         stats.innerHTML = `
             <span><strong>${result.detectedClassCount || 0}</strong> clases detectadas</span>
-            <span><strong>${result.detectedRelationshipCount || 0}</strong> relaciones detectadas</span>
+            <span><strong>${photo.connections?.length || 0}</strong> conexiones propuestas</span>
         `;
 
         const notes = $('#photoReviewNotes');
@@ -2005,14 +2235,24 @@ $('#btnProcessPhoto').addEventListener('click', async () => {
         let edit=document.getElementById('webPhotoText');
         if(!edit){const label=document.createElement('label');label.textContent='Revisar y corregir texto antes de importar';edit=document.createElement('textarea');edit.id='webPhotoText';edit.rows=12;edit.style.width='100%';label.append(edit);notes.after(label);}
         edit.value=photo.text;
+        renderPhotoDraftCards();
+        setPhotoStudioStage('review');
+        for (const warning of photo.warnings || []) {
+            const line = document.createElement('p'); line.textContent = warning; notes.append(line);
+        }
         renderPhotoOcrDiagnostics(photo.diagnostics, notes);
 
         showToast(`Interpretación completada: ${result.detectedClassCount} clases encontradas`, 'success');
     } catch (err) {
+        setPhotoStudioStage('ready');
+        $('#photoReadError').classList.remove('hidden');
+        $('#photoReadError').textContent = `No pudimos completar la lectura. ${err.message}. Puedes reintentar o cambiar la imagen.`;
         showToast(`Error al interpretar fotografía: ${err.message}`, 'error');
     } finally {
         btn.disabled = false;
-        btn.textContent = 'Interpretar Diagrama';
+        btn.textContent = state.detectedDiagram ? 'Volver a leer imagen' : 'Leer diagrama →';
+        $('#btnChangePhoto').disabled = false;
+        $('#photoUseVision').disabled = false;
     }
 });
 
@@ -2050,6 +2290,10 @@ $('#btnDiscardPhotoDiagram').addEventListener('click', () => {
     dropzone.classList.remove('hidden');
     state.pendingPhotoFile = null;
     state.detectedDiagram = null;
+    state.detectedPhotoConnections = null;
+    $('#btnChangePhoto').classList.add('hidden');
+    $('#photoReadError').classList.add('hidden');
+    setPhotoStudioStage('upload');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2121,6 +2365,16 @@ function init() {
 
     renderAll();
     initWebSocket();
+    const requestedBuild = new URLSearchParams(location.search).get('build');
+    if (requestedBuild && /^[a-f0-9]{32}$/.test(requestedBuild)) {
+        showGeneratePanel();
+        // A delivery link opens the result once; reloads return to the editor.
+        // watchApkBuild persists the ID for later access through Generar.
+        localStorage.setItem('uml-last-build', requestedBuild);
+        const editorUrl = new URL(location.href);
+        editorUrl.searchParams.delete('build');
+        history.replaceState(null, '', editorUrl.href);
+    }
     // Debounced broadcast on real changes + gentle 3-second fallback heartbeat
     setInterval(broadcastChange, 3000);
     $('#btnShare').addEventListener('click', showShareDialog);

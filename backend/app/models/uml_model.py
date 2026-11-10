@@ -318,6 +318,7 @@ class UMLRelationship:
     name: Optional[str] = None
     label: Optional[str] = None
     vertices: list[Position] = field(default_factory=list)
+    association_class_id: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -328,6 +329,7 @@ class UMLRelationship:
             "name": self.name,
             "label": self.label,
             "vertices": [v.to_dict() for v in self.vertices],
+            "associationClassId": self.association_class_id,
         }
 
     @classmethod
@@ -340,6 +342,7 @@ class UMLRelationship:
             name=data.get("name"),
             label=data.get("label"),
             vertices=[Position.from_dict(v) for v in data.get("vertices", [])],
+            association_class_id=data.get("associationClassId"),
         )
 
 

@@ -36,6 +36,7 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        TeamMessagingService.createChannel(this);
         WebViewAssetLoader.AssetsPathHandler assets = new WebViewAssetLoader.AssetsPathHandler(this);
         WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/", path -> {
@@ -139,6 +140,36 @@ public class MainActivity extends Activity {
         });
 
         if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(web,"UMLPush",Collections.singleton("https://appassets.androidplatform.net"),
+                (view,message,origin,mainFrame,reply)->{
+                    if(!mainFrame||!local(origin))return;
+                    if(android.os.Build.VERSION.SDK_INT>=33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){
+                        requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},44);
+                        reply.postMessage("{\"error\":\"Autoriza las notificaciones y vuelve a tocar Activar.\"}");return;
+                    }
+                    try {
+                        if(com.google.firebase.FirebaseApp.initializeApp(this)==null){reply.postMessage("{\"error\":\"Falta configurar Firebase y recompilar la APK.\"}");return;}
+                        com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task->{
+                            try {
+                                JSONObject result=new JSONObject();
+                                if(task.isSuccessful())result.put("token",task.getResult());
+                                else result.put("error","No se pudo registrar este dispositivo en Firebase.");
+                                reply.postMessage(result.toString());
+                            }catch(Exception error){reply.postMessage("{\"error\":\"Registro no disponible\"}");}
+                        });
+                    }catch(Exception error){reply.postMessage("{\"error\":\"Firebase no está configurado\"}");}
+                });
+            WebViewCompat.addWebMessageListener(web,"UMLBrowser",Collections.singleton("https://appassets.androidplatform.net"),
+                (view,message,origin,mainFrame,reply)->{
+                    if(!mainFrame||!local(origin))return;
+                    try {
+                        Uri destination=Uri.parse(message.getData());
+                        if(!"https".equals(destination.getScheme())&&!"http".equals(destination.getScheme()))return;
+                        if(destination.getHost()==null||destination.getUserInfo()!=null)return;
+                        if(!"/seguimiento.html".equals(destination.getPath()))return;
+                        startActivity(new Intent(Intent.ACTION_VIEW,destination));
+                    } catch(Exception error){reply.postMessage("No se pudo abrir el navegador");}
+                });
             WebViewCompat.addWebMessageListener(web,"UMLFiles",Collections.singleton("https://appassets.androidplatform.net"),
                 (view,message,origin,mainFrame,reply)->{
                     if(!mainFrame||!local(origin))return;
@@ -159,7 +190,19 @@ public class MainActivity extends Activity {
                     } catch(Exception error){if(exportReply!=null)finishExport("error");else reply.postMessage("error");}
                 });
         }
-        web.loadUrl("https://appassets.androidplatform.net/index.html?view=mobile");
+        openProject(getIntent());
+    }
+
+    private void openProject(Intent intent) {
+        String project = intent.getStringExtra("room");
+        if(project==null)project=intent.getStringExtra("project");
+        web.loadUrl("https://appassets.androidplatform.net/seguimiento.html"+(project==null?"":"?project="+Uri.encode(project)));
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        openProject(intent);
     }
 
     @Override public void onRequestPermissionsResult(int request, String[] names, int[] grants) {

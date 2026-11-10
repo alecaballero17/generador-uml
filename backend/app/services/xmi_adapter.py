@@ -94,7 +94,10 @@ class XMIAdapter:
 
     def export_to_xmi(self, diagram: UMLDiagram) -> str:
         """Export a UML diagram to XMI 2.1 XML string."""
+        from ..models.association_classes import normalize_association_classes
+        normalize_association_classes(diagram)  # Validate links without changing the notation.
         self.warnings = []
+        association_classes = {r.association_class_id:r for r in diagram.relationships if r.association_class_id}
 
         # Root element
         root = Element("xmi:XMI")
@@ -198,7 +201,7 @@ class XMIAdapter:
             class_props = SubElement(class_meta, "properties")
             class_props.set("isSpecification", "false")
             class_props.set("sType", "Interface" if cls.is_interface else "Class")
-            class_props.set("nType", "0")
+            class_props.set("nType", "17" if cls.id in association_classes else "0")
             class_props.set("scope", VISIBILITY_REVERSE.get(cls.visibility, "public"))
             class_props.set("isRoot", "false")
             class_props.set("isLeaf", "false")
@@ -216,6 +219,21 @@ class XMIAdapter:
             extended = SubElement(class_meta, "extendedProperties")
             extended.set("tagged", "0")
             extended.set("package_name", diagram.name)
+            if cls.id in association_classes:
+                extended.set("conID", self._ea_identifier("EAID", f"relationship:{association_classes[cls.id].id}"))
+            # Declare the connector identity in EA's link table. A bare idref
+            # is not remapped by Strip GUIDs, causing a copied association class
+            # to bind to the original package's connector instead of its copy.
+            links = SubElement(class_meta, 'links')
+            for rel in diagram.relationships:
+                if rel.source.class_id != cls.id:
+                    continue
+                kind = 'Association' if rel.type in (RelationshipType.ASSOCIATION, RelationshipType.AGGREGATION, RelationshipType.COMPOSITION) else 'Generalization' if rel.type == RelationshipType.GENERALIZATION else 'Realisation' if rel.type == RelationshipType.REALIZATION else 'Dependency'
+                SubElement(links, kind, {
+                    'xmi:id': self._ea_identifier('EAID', f'relationship:{rel.id}'),
+                    'start': class_id_map[rel.source.class_id],
+                    'end': class_id_map[rel.target.class_id],
+                })
 
         # EA requires this sibling even when the UML model has no connectors.
         extension_connectors = SubElement(ext, "connectors")
@@ -292,6 +310,8 @@ class XMIAdapter:
             attr_el.set("xmi:id", f"attr_{attr.id}")
             attr_el.set("name", attr.name)
             attr_el.set("visibility", VISIBILITY_REVERSE.get(attr.visibility, "private"))
+            attr_el.set("isUnique", "true")
+            attr_el.set("isOrdered", "false")
             if attr.is_static:
                 attr_el.set("isStatic", "true")
             if attr.is_final:
@@ -366,10 +386,16 @@ class XMIAdapter:
             generalization.set("general", target_xmi)
             return generalization
 
-        el = SubElement(parent, "packagedElement")
+        if rel.association_class_id:
+            # One UML classifier owns the class fields and association ends.
+            # EA's separate connector ID remains in the vendor extension.
+            rel_xmi_id = class_id_map[rel.association_class_id]
+            el = next(child for child in parent if child.get("xmi:id") == rel_xmi_id)
+        else:
+            el = SubElement(parent, "packagedElement")
 
         if rel.type in (RelationshipType.ASSOCIATION, RelationshipType.AGGREGATION, RelationshipType.COMPOSITION):
-            el.set("xmi:type", "uml:Association")
+            el.set("xmi:type", "uml:AssociationClass" if rel.association_class_id else "uml:Association")
             el.set("xmi:id", rel_xmi_id)
             # EA only materializes an association as a connector when the
             # association owns, and explicitly references, EA-style end IDs.
@@ -377,8 +403,10 @@ class XMIAdapter:
             source_end_id = self._ea_identifier("EAID", f"relationship:{rel.id}:source-end")
             target_end_id = self._ea_identifier("EAID", f"relationship:{rel.id}:target-end")
             el.set("memberEnd", f"{source_end_id} {target_end_id}")
-            if rel.name:
+            if rel.name and not rel.association_class_id:
                 el.set("name", rel.name)
+            navigable_ends = [end_id for end_id,end in ((source_end_id,rel.source),(target_end_id,rel.target)) if end.navigable]
+            el.set("navigableOwnedEnd", " ".join(navigable_ends))
 
             # Source end
             source_end = SubElement(el, "ownedEnd")
@@ -448,15 +476,20 @@ class XMIAdapter:
             model = SubElement(endpoint_el, "model")
             model.set("type", "Class")
             role = SubElement(endpoint_el, "role")
+            if endpoint.role:
+                role.set("name", endpoint.role)
             role.set("visibility", "Public")
             role.set("targetScope", "instance")
             type_el = SubElement(endpoint_el, "type")
-            type_el.set("aggregation", "composite" if rel.type == RelationshipType.COMPOSITION else "shared" if rel.type == RelationshipType.AGGREGATION else "none")
+            aggregate = endpoint_name == 'source'
+            type_el.set("aggregation", "composite" if aggregate and rel.type == RelationshipType.COMPOSITION else "shared" if aggregate and rel.type == RelationshipType.AGGREGATION else "none")
+            if endpoint.multiplicity:
+                type_el.set("multiplicity", str(endpoint.multiplicity.value if hasattr(endpoint.multiplicity,'value') else endpoint.multiplicity))
             SubElement(endpoint_el, "constraints")
             modifiers = SubElement(endpoint_el, "modifiers")
             modifiers.set("isOrdered", "false")
             modifiers.set("changeable", "none")
-            modifiers.set("isNavigable", "false")
+            modifiers.set("isNavigable", "true" if endpoint.navigable else "false")
             SubElement(endpoint_el, "style").set("value", "Union=0;Derived=0;AllowDuplicates=0;Owned=0;")
             SubElement(endpoint_el, "documentation")
             SubElement(endpoint_el, "xrefs")
@@ -464,12 +497,16 @@ class XMIAdapter:
         SubElement(connector, "model")
         properties = SubElement(connector, "properties")
         properties.set("name", rel.name or "")
-        properties.set("ea_type", rel.type.value if hasattr(rel.type, "value") else str(rel.type))
-        properties.set("direction", "Source -> Destination")
+        properties.set("ea_type", 'Association' if rel.type in (RelationshipType.ASSOCIATION, RelationshipType.AGGREGATION, RelationshipType.COMPOSITION) else 'Generalization' if rel.type == RelationshipType.GENERALIZATION else 'Realisation' if rel.type == RelationshipType.REALIZATION else 'Dependency')
+        properties.set("direction", "Bi-Directional" if rel.source.navigable and rel.target.navigable else "Source -> Destination" if rel.target.navigable else "Destination -> Source" if rel.source.navigable else "Unspecified")
+        if rel.association_class_id:
+            properties.set("subtype", "Class")
         SubElement(connector, "documentation")
         SubElement(connector, "appearance").set("linemode", "1")
         extended = SubElement(connector, "extendedProperties")
         extended.set("diagram", diagram_id)
+        if rel.association_class_id:
+            extended.set("associationclass", class_id_map[rel.association_class_id])
         SubElement(connector, "style")
         SubElement(connector, "xrefs")
         SubElement(connector, "tags")
@@ -527,7 +564,6 @@ class XMIAdapter:
 
         # Parse classes
         xmi_to_class: dict[str, UMLClass] = {}
-        parsed_association_ids: set[str] = set()
         incomplete_association_ids: set[str] = set()
         x_offset = 50
         y_offset = 50
@@ -541,13 +577,17 @@ class XMIAdapter:
                 else:
                     yield element
         elements = list(package_elements(model_el))
+        self._xmi_properties = {
+            self._get_xmi_attr(el, 'id'):el for el in root.iter()
+            if el.tag.split('}')[-1] in ('ownedEnd','ownedAttribute') and self._get_xmi_attr(el,'id')
+        }
         # Resolve every class before any relation, independent of document order.
         elements.sort(key=lambda el: 0 if self._get_xmi_attr(el, "type") in ("uml:Class", "uml:Interface") or el.tag.split("}")[-1] in ("Class", "Interface") else 1)
         for el in elements:
             xmi_type = self._get_xmi_attr(el, "type")
             tag = el.tag.split("}")[-1] if "}" in el.tag else el.tag
 
-            if xmi_type in ("uml:Class", "uml:Interface") or tag in ("Class", "Interface"):
+            if xmi_type in ("uml:Class", "uml:Interface", "uml:AssociationClass") or tag in ("Class", "Interface", "AssociationClass"):
                 cls = self._parse_class(el, ns)
                 cls.position.x = x_offset
                 cls.position.y = y_offset
@@ -564,22 +604,28 @@ class XMIAdapter:
                 if xmi_type == "uml:Interface" or tag == "Interface":
                     cls.is_interface = True
 
-            elif xmi_type == "uml:Association" or tag == "Association":
+        # AssociationClass has both classifier and relationship semantics.
+        # All classifiers must exist before resolving either kind of association.
+        for el in elements:
+            xmi_type = self._get_xmi_attr(el, "type")
+            tag = el.tag.split("}")[-1]
+            if xmi_type in ("uml:Association", "uml:AssociationClass") or tag in ("Association", "AssociationClass"):
                 association_id = self._get_xmi_attr(el, "id") or el.get("id", "")
                 rel = self._parse_association(el, ns, xmi_to_class)
                 if rel:
+                    if xmi_type == 'uml:AssociationClass' or tag == 'AssociationClass':
+                        rel.association_class_id = xmi_to_class[association_id].id
+                        rel.name = None  # The classifier's name is not an association label.
                     diagram.add_relationship(rel)
-                    if association_id:
-                        parsed_association_ids.add(association_id)
                 elif association_id:
                     incomplete_association_ids.add(association_id)
 
-            elif xmi_type in ("uml:Realization", "uml:Dependency") or tag in ("Realization", "Dependency"):
-                rel = self._parse_directed_rel(el, ns, xmi_to_class, xmi_type)
+            elif xmi_type in ("uml:Realization", "uml:InterfaceRealization", "uml:Dependency") or tag in ("Realization", "InterfaceRealization", "Dependency"):
+                rel = self._parse_directed_rel(el, ns, xmi_to_class, xmi_type or tag)
                 if rel:
                     diagram.add_relationship(rel)
 
-            else:
+            elif xmi_type not in ('uml:Class','uml:Interface') and tag not in ('Class','Interface'):
                 self.unsupported_elements.append(f"{tag} ({xmi_type})")
 
         for el in elements:
@@ -596,6 +642,7 @@ class XMIAdapter:
                     self.warnings.append("Herencia con clase padre desconocida, omitida.")
                     continue
                 diagram.add_relationship(UMLRelationship(
+                    id=self._get_xmi_attr(generalization,'id') or str(uuid.uuid4()),
                     type=RelationshipType.GENERALIZATION,
                     source=RelationshipEnd(class_id=child.id),
                     target=RelationshipEnd(class_id=parent.id)))
@@ -648,14 +695,19 @@ class XMIAdapter:
             "aggregation": RelationshipType.AGGREGATION,
             "composition": RelationshipType.COMPOSITION,
             "realization": RelationshipType.REALIZATION,
+            "realisation": RelationshipType.REALIZATION,
             "dependency": RelationshipType.DEPENDENCY,
         }
+        association_class_by_connector = {}
+        for elem in root.iter('element'):
+            ref = self._get_xmi_attr(elem, 'idref')
+            extended = elem.find('extendedProperties')
+            if ref in xmi_to_class and extended is not None and extended.get('conID'):
+                association_class_by_connector[extended.get('conID')] = ref
         for elem in root.iter():
             if elem.tag.split("}")[-1] != "connector":
                 continue
             connector_id = self._get_xmi_attr(elem, "idref") or self._get_xmi_attr(elem, "id")
-            if connector_id in parsed_association_ids:
-                continue
             properties = next(
                 (child for child in elem if child.tag.split("}")[-1] == "properties"),
                 None,
@@ -665,18 +717,38 @@ class XMIAdapter:
             target = next((child for child in elem if child.tag.split("}")[-1] == "target"), None)
             source_cls = xmi_to_class.get(self._get_xmi_attr(source, "idref")) if source is not None else None
             target_cls = xmi_to_class.get(self._get_xmi_attr(target, "idref")) if target is not None else None
+            extended = next((child for child in elem if child.tag.split('}')[-1] == 'extendedProperties'), None)
+            class_ref = (extended.get('associationclass', '') if extended is not None else '') or association_class_by_connector.get(connector_id, '')
+            linked_class = xmi_to_class.get(class_ref)
+            # The standard AssociationClass ID and EA connector ID differ.
+            # Bind the extension to the existing relation instead of adding a duplicate.
+            existing = next((r for r in diagram.relationships if r.id == connector_id or
+                             (linked_class and r.association_class_id == linked_class.id)), None)
             if relation_type and source_cls and target_cls:
-                diagram.add_relationship(UMLRelationship(
-                    id=connector_id or str(uuid.uuid4()),
-                    type=relation_type,
-                    source=RelationshipEnd(class_id=source_cls.id),
-                    target=RelationshipEnd(class_id=target_cls.id),
-                ))
-                if connector_id in incomplete_association_ids:
-                    try:
-                        self.warnings.remove("Asociación con menos de 2 extremos, omitida.")
-                    except ValueError:
-                        pass
+                rel = existing or UMLRelationship(id=connector_id or str(uuid.uuid4()), type=relation_type)
+                rel.id = connector_id or rel.id
+                rel.source.class_id, rel.target.class_id = source_cls.id, target_cls.id
+                if 'name' in properties.attrib:
+                    rel.name = properties.get('name') or None
+                for node,end in ((source,rel.source),(target,rel.target)):
+                    data = next((child for child in node if child.tag.split('}')[-1] == 'type'), None)
+                    role = next((child for child in node if child.tag.split('}')[-1] == 'role'), None)
+                    modifiers = next((child for child in node if child.tag.split('}')[-1] == 'modifiers'), None)
+                    if data is not None and 'multiplicity' in data.attrib:
+                        end.multiplicity = data.get('multiplicity') or None
+                    if role is not None and 'name' in role.attrib:
+                        end.role = role.get('name') or None
+                    if modifiers is not None and 'isNavigable' in modifiers.attrib:
+                        end.navigable = modifiers.get('isNavigable', '').lower() == 'true'
+                if class_ref:
+                    if linked_class:
+                        rel.association_class_id = linked_class.id
+                    else:
+                        self.warnings.append('Clase de asociación no encontrada: ' + class_ref)
+                if existing is None:
+                    diagram.add_relationship(rel)
+                if connector_id in incomplete_association_ids or linked_class:
+                    self.warnings = [warning for warning in self.warnings if warning != 'Asociación con menos de 2 extremos, omitida.']
 
         return diagram
 
@@ -696,7 +768,9 @@ class XMIAdapter:
                 or attr_el.get("{%s}type" % XMI_2013_NS, "")
             )
 
-            if tag == "ownedAttribute" or xmi_type == "uml:Property":
+            if tag == "ownedAttribute":
+                if attr_el.get('association'):
+                    continue  # Association-owned ends are not business attributes.
                 attr = UMLAttribute()
                 attr.id = self._get_xmi_attr(attr_el, "id") or attr_el.get("id", attr.id)
                 attr.name = attr_el.get("name", "")
@@ -761,35 +835,36 @@ class XMIAdapter:
     def _parse_association(self, el: Element, ns: dict,
                            xmi_to_class: dict[str, UMLClass]) -> Optional[UMLRelationship]:
         """Parse an association from XMI."""
+        def child_named(element, name):
+            return next((child for child in element if child.tag.split('}')[-1] == name), None)
+
+        # EA often stores one end as an ownedAttribute in another classifier.
+        # Resolve memberEnd references globally, not just the local ownedEnd nodes.
+        references = el.get('memberEnd', '').split()
+        references += [self._get_xmi_attr(child, 'idref') for child in el
+                       if child.tag.split('}')[-1] == 'memberEnd']
+        properties = getattr(self, '_xmi_properties', {})
+        end_nodes = [properties[ref] for ref in dict.fromkeys(references) if ref in properties]
+        if not references:
+            end_nodes = [child for child in el if child.tag.split('}')[-1] == 'ownedEnd']
         ends = []
-        for child in el:
-            tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
-            x_type = self._get_xmi_attr(child, "type")
-            if tag == "ownedEnd" or x_type == "uml:Property":
-                end_type = child.get("type") or self._get_xmi_attr(child, "type")
-                if not end_type or end_type == "uml:Property":
-                    type_sub = child.find("type")
-                    if type_sub is not None:
-                        end_type = self._get_xmi_attr(type_sub, "idref") or type_sub.get("href", "")
-
-                end_role = child.get("name")
-                end_agg = child.get("aggregation", "none")
-
-                # Parse multiplicity
-                mult = "1"
-                lower_el = child.find("lowerValue")
-                upper_el = child.find("upperValue")
-                if lower_el is not None and upper_el is not None:
-                    lower = lower_el.get("value", "1")
-                    upper = upper_el.get("value", "1")
-                    if lower == "-1": lower = "*"
-                    if upper == "-1": upper = "*"
-                    mult = f"{lower}..{upper}" if lower != upper else lower
-
-                ends.append({
-                    "type": end_type, "role": end_role,
-                    "aggregation": end_agg, "multiplicity": mult,
-                })
+        navigable = el.get('navigableOwnedEnd')
+        nav_ids = navigable.split() if navigable is not None else None
+        for child in end_nodes:
+            end_type = child.get('type', '')
+            if not end_type:
+                nested = child_named(child, 'type')
+                if nested is not None:
+                    end_type = self._get_xmi_attr(nested, 'idref') or nested.get('href', '').split('#')[-1]
+            lower_el, upper_el = child_named(child, 'lowerValue'), child_named(child, 'upperValue')
+            lower = lower_el.get('value', '1') if lower_el is not None else child.get('lower', '1')
+            upper = upper_el.get('value', '1') if upper_el is not None else child.get('upper', '1')
+            lower, upper = ('*' if lower == '-1' else lower), ('*' if upper == '-1' else upper)
+            mult = lower if lower == upper else f'{lower}..{upper}'
+            end_id = self._get_xmi_attr(child, 'id')
+            ends.append(dict(type=end_type, role=child.get('name'),
+                             aggregation=child.get('aggregation', 'none'), multiplicity=mult,
+                             navigable=end_id in nav_ids if nav_ids is not None else False))
 
         if len(ends) < 2:
             self.warnings.append(f"Asociación con menos de 2 extremos, omitida.")
@@ -810,17 +885,20 @@ class XMIAdapter:
             return None
 
         rel = UMLRelationship()
+        rel.id = self._get_xmi_attr(el, 'id') or rel.id
         rel.type = rel_type
         rel.name = el.get("name")
         rel.source = RelationshipEnd(
             class_id=source_cls.id,
             role=ends[0].get("role"),
             multiplicity=ends[0]["multiplicity"],
+            navigable=ends[0]['navigable'],
         )
         rel.target = RelationshipEnd(
             class_id=target_cls.id,
             role=ends[1].get("role"),
             multiplicity=ends[1]["multiplicity"],
+            navigable=ends[1]['navigable'],
         )
         return rel
 
@@ -846,6 +924,8 @@ class XMIAdapter:
             return None
 
         rel = UMLRelationship()
+        rel.id = self._get_xmi_attr(el, 'id') or rel.id
+        rel.name = el.get('name')
         if "Realization" in xmi_type:
             rel.type = RelationshipType.REALIZATION
         else:

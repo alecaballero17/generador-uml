@@ -1,5 +1,23 @@
 # GeneradorUML — Herramienta CASE Integral de Ingeniería de Software
 
+## Entrega local y defensa (revisión 5 de noviembre de 2026)
+
+La guía vigente es [Primera parte y APK](docs/primera-parte.md). Incluye las cinco
+preguntas, el ejemplo de ventas, compilación desde el editor, Postman y prueba por USB.
+El [registro de verificación](docs/verificacion-2026-11-05.md) distingue pruebas ejecutadas
+de la aceptación pendiente en un teléfono físico. Los PDF/DOCX anteriores son entregas
+históricas; esta revisión y el [Proceso Unificado](docs/proceso_unificado_pud.md) los complementan.
+
+Desde la raíz: `powershell -NoProfile -File scripts/Start-Local.ps1`.
+En `http://127.0.0.1:8765`, importa `examples/ventas_defensa.json`, abre **Generar Código**
+y pulsa **Generar y compilar APK (local)**. Se muestran etapas, errores y descargas reales.
+Requiere Python, Maven, Java, Flutter y Android SDK instalados; la primera compilación
+puede necesitar Internet para descargar dependencias. Render no compila APKs.
+
+La aplicación generada cubre CRUD y relaciones del modelo. Cálculos comerciales,
+pagos, autorización por roles y demás reglas que no estén especificadas en el diagrama
+requieren requisitos e implementación adicionales; no se promete deducirlos de una foto.
+
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI_0.100+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Gemini Flash](https://img.shields.io/badge/AI-Gemini%20Flash-4285F4?logo=google&logoColor=white)](https://ai.google.dev/)
 [![Whisper](https://img.shields.io/badge/Voice%20AI-Whisper%20Tiny%20ONNX-7C3AED)](https://openai.com/research/whisper)
@@ -9,7 +27,7 @@
 [![UML](https://img.shields.io/badge/Standard-UML_2.5+-blue)](https://www.omg.org/spec/UML/)
 [![Tests](https://img.shields.io/badge/Tests-67%2F67%20Passed-brightgreen)](tests/)
 
-**GeneradorUML** es una herramienta CASE (*Computer-Aided Software Engineering*) integral de nivel profesional que permite modelar, editar e interpretar diagramas de clases **UML 2.5+**, colaborar en tiempo real y transformar automáticamente los diagramas en un sistema de producción funcional de extremo a extremo:
+**GeneradorUML** es una herramienta CASE (*Computer-Aided Software Engineering*) que permite modelar, editar e interpretar diagramas de clases, colaborar en tiempo real y generar un sistema CRUD para pruebas locales:
 
 1. **Asistente Conversacional Inteligente (Siri UML):** Diálogo natural en español con **Google Gemini Flash** y síntesis de voz (TTS). Permite crear, modificar clases, atributos y relaciones hablando con naturalidad con feedback visual en tiempo real (orbe reactivo y analizador de ondas WebAudio).
 2. **Colaboración Multiusuario en Tiempo Real:** Edición simultánea estilo Google Docs vía WebSockets con algoritmo **Three-Way Merge** campo a campo, tokens de capacidad y base de datos de revisiones en SQLite.
